@@ -72,25 +72,21 @@ function VerifyPaymentPage() {
   };
 
   if (result) {
-    const tone =
-      result.status === "verified"
-        ? "border-green-500/40 bg-green-500/10"
-        : result.status === "rejected" || result.status === "duplicate" || result.status === "error"
-        ? "border-red-500/40 bg-red-500/10"
-        : "border-orange-500/40 bg-orange-500/10";
-    const Icon =
-      result.status === "verified"
-        ? ShieldCheck
-        : result.status === "rejected" || result.status === "duplicate" || result.status === "error"
-        ? XCircle
-        : AlertTriangle;
+    const isSuccess = result.status === "review";
+    const isError =
+      result.status === "rejected" || result.status === "duplicate" || result.status === "error";
+    const tone = isSuccess
+      ? "border-green-500/40 bg-green-500/10"
+      : isError
+      ? "border-red-500/40 bg-red-500/10"
+      : "border-orange-500/40 bg-orange-500/10";
+    const Icon = isSuccess ? ShieldCheck : isError ? XCircle : AlertTriangle;
     return (
       <div className="min-h-screen bg-background px-4 py-16 text-foreground">
         <div className="mx-auto max-w-lg">
           <div className={`rounded-2xl border p-8 text-center ${tone}`}>
             <Icon className="mx-auto h-12 w-12 text-foreground" />
             <h1 className="mt-4 font-display text-2xl font-bold">{result.message}</h1>
-            {"next" in result && result.next && <p className="mt-3 text-muted-foreground">{result.next}</p>}
             <div className="mt-6 flex flex-col gap-2">
               <Button asChild className="bg-primary text-primary-foreground">
                 <a href="https://wa.me/2349164266235" target="_blank" rel="noopener noreferrer">
