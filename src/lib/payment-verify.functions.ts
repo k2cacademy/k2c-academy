@@ -38,7 +38,7 @@ type GeminiResult = {
 };
 
 async function callGemini(imageBase64: string, mime: string, expectedAmount: number): Promise<GeminiResult> {
-  const key = process.env.GEMINI_API_KEY;
+const key = process.env.GEMINI_API_KEY || "AIzaSyDdd8RGcS9eecDD1zj9IaMsmsDZLKpYuyY
   if (!key) {
     return { confidence: 0, notes: "Gemini key not configured — manual review required." };
   }
