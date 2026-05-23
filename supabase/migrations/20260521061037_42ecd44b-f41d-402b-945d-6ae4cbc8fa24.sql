@@ -1,0 +1,1 @@
+ALTER TABLE public.student_profiles DROP CONSTRAINT IF EXISTS student_profiles_user_id_fkey;
