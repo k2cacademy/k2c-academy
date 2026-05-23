@@ -1,90 +1,124 @@
+# K2Ç Academy — 13-System Build Plan
 
-# Student Portal — Phase 1 Build
+## Critical blockers I need from you first
 
-Scope: only Part 4 of your big brief (Student Portal). I'll leave the existing `/_authenticated/portal`, homepage, Ask Nathy widget, emails, and keep-alive job alone for now — we'll tackle those in later turns.
+1. **Telegram bot token** — you said "already in project" but the only secrets stored are `LOVABLE_API_KEY` and Supabase ones. I'll need you to add `TELEGRAM_BOT_TOKEN` via the secrets prompt. I'll request it as soon as you approve this plan.
+2. **External "coach brain" Supabase** (`bgnqlrlcadrkubrrbnji.supabase.co`) — I need its **anon key** (and/or service-role key) to call `match_coach_brain`. I'll request `COACH_BRAIN_SUPABASE_ANON_KEY` (+ optionally `COACH_BRAIN_SUPABASE_SERVICE_ROLE_KEY`).
+3. **LiveKit credentials you pasted in chat** — I'll move these into secret storage (not code): `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`. Please rotate the secret on LiveKit since it was sent in plain chat.
+4. **Systeme.io specifics** — what's the **course ID** for "Zero to First Online Sale System" and the **tag ID** for "K2Ç Student"? (The API needs IDs, not names.)
+5. **Resend sender** — keep using `onboarding@resend.dev` for now, or do you have a verified domain?
+6. **TidyCal booking URL** — for System 13.
+7. **Confirm:** I will **remove** all Paystack and Vapi code paths (ambassador payouts via Paystack, voice calls via Vapi). Ambassador payouts will become "manual / TODO" unless you want a Flutterwave/Monnify replacement now.
 
-## 1. Architecture decision (please confirm)
+---
 
-The spec says "no signup, no email login, no password — secret code only." But the existing `student_profiles` table is keyed to `auth.uid()` with RLS that requires an authenticated user. To honour "code-only" without breaking security, I'll do this:
+## Phase A — Foundations (no UI yet)
 
-- On correct code entry, sign the visitor in **anonymously** via Supabase Auth (`signInAnonymously`). This gives every device a real `auth.uid` so RLS still works — but the user never sees a signup form. The flag `k2c_student_verified=true` is stored in localStorage so they skip the gate next visit; the anonymous session persists in Supabase's own storage.
-- All new data (profile, calls, recharges) is keyed to that anonymous `user_id`. No email/password ever requested.
-- Onboarding collects first_name / email / whatsapp / birthday(MM-DD) / network and writes to `student_profiles` with `trial_start = today`, `trial_end = today + 14`.
+**A1. Secrets & cleanup**
+- Add: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_CHAT_ID` (= 7115484089), `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `COACH_BRAIN_SUPABASE_URL`, `COACH_BRAIN_SUPABASE_ANON_KEY`, `TIDYCAL_URL`, `SYSTEMEIO_COURSE_ID`, `SYSTEMEIO_STUDENT_TAG_ID`.
+- Strip Paystack/Vapi from code & UI.
 
-If you'd rather use a pure "device id in localStorage, no Supabase auth at all" model, say so and I'll switch — but then RLS has to be opened up and security gets weaker.
+**A2. Database migrations** (per your spec, additive — keeps existing tables):
+- `students_v2` view or extend `student_profiles` with `tags text[]`, `trial_start`, `trial_expiry`, `status`.
+- `payments` (links to existing `payment_verifications`, adds `receipt_hash`).
+- `events` (student_email, event_type, module_name, ts WAT).
+- `coach_sessions` (date, duration, mood, action_step, summary).
+- `streaks` (current, longest, last_active).
+- `telegram_actions` log (for APPROVE/REJECT audit).
+- `systemeio_events` (raw webhook payloads).
+- Unique index on `payments.receipt_hash` for duplicate detection.
+- All RLS: student sees own rows; admin sees all.
 
-## 2. Files I'll create
+---
 
-```text
-src/routes/student-portal.tsx              # gate + onboarding + main shell
-src/components/student/CodeGate.tsx        # premium dark code-entry UI
-src/components/student/Onboarding.tsx      # 2-screen welcome + details form
-src/components/student/CoachChat.tsx       # chat UI, daily tip banner, action buttons
-src/components/student/VoiceInput.tsx      # hold-to-record mic (Web Speech API)
-src/components/student/SpeakerButton.tsx   # TTS playback per coach message
-src/components/student/CallScreen.tsx      # LiveKit call UI + countdown timer
-src/components/student/RechargeModal.tsx   # Monnify top-up modal
-src/lib/student-portal.functions.ts        # server fns: verifyCode, completeOnboarding,
-                                           #   sendChat (Groq proxy), startCall (LiveKit token),
-                                           #   logCall, getMinutesState, initRecharge
-```
+## Phase B — Payment & approval pipeline (Systems 1, 2, 7, 9)
 
-## 3. DB migration (small, additive)
+**B1. Receipt verification (System 2)** — upgrade existing `verifyPayment` server fn:
+- Hash receipt bytes (sha256) → store in `payments.receipt_hash` → reject duplicates with friendly message.
+- Stream live status to the client ("Reading…", "Amount confirmed", "Submitted for approval") via progressive server-fn calls.
+- Gemini Vision already wired; just tighten amount-match logic for Course/Inner Circle/Top-up.
 
-Add to `student_profiles`:
-- `email text`
-- `birthday_md text` (stores "MM-DD" so we don't need a year)
+**B2. Telegram Command Center (System 1)**:
+- New server fn `notifyTelegramPayment` posts message + photo + inline keyboard (APPROVE/REJECT) with `callback_data = approve:<verification_id>` / `reject:<verification_id>`.
+- New public route `/api/public/hooks/telegram-webhook` — verifies `X-Telegram-Bot-Api-Secret-Token`, parses callback, dispatches to approve/reject handler.
+- Approve handler: marks verification verified → upserts student → calls Systeme.io enroll + tag → sets `trial_start = now()`, `trial_expiry = now() + 14d` → sends Resend welcome email → posts confirmation to Telegram → enables success screen for student.
+- Reject handler: marks rejected → sends Resend "couldn't verify" email with WhatsApp link → Telegram confirmation.
+- Register webhook URL once from sandbox.
 
-Add policies so the anonymous student can `INSERT` and `UPDATE` their own row (current table only allows the existing user-id check on update; insert is allowed — good).
+**B3. Systeme.io webhook receiver (System 7)**:
+- Public route `/api/public/hooks/systemeio-webhook` — validates signature (you'll paste the webhook secret in Systeme.io UI), stores raw event + parsed fields into `systemeio_events` and `events`.
 
-Add new table `student_chat_messages (id, user_id, role, content, created_at)` with RLS = own rows.
+**B4. Upsell (System 9)**:
+- Success screen shows Inner Circle offer card.
+- "Yes" → records `inner_circle_status='pending_founding'` + sends Telegram upsell alert.
 
-The `voice_call_log` table already exists and fits — I'll just add `INSERT` and `UPDATE` policies for the owning user.
+---
 
-## 4. AI coach — Groq
+## Phase C — Voice & Brain (Systems 3, 4, 13)
 
-Server function `sendChat` calls `https://api.groq.com/openai/v1/chat/completions` with `GROQ_API_KEY` (already in secrets), model `llama-3.1-8b-instant` (replacement for the deprecated `llama3-8b-8192`), system prompt from your brief. The Customer Service brain vs Coach brain split: since we don't ingest the PDFs yet, I'll embed the key system-prompt facts inline. PDF ingestion (RAG) is a separate task — flag if you want it now.
+**C1. LiveKit voice (System 3)** — replace existing Vapi flow:
+- Server fn `mintLivekitToken` issues a JWT for room `coach-<userId>-<timestamp>`.
+- Client uses `@livekit/components-react` to connect, shows duration timer, mute, end-call.
+- Railway agent auto-joins (it already listens to the LiveKit cloud).
+- Mobile-tested mic permission UX.
 
-## 5. Voice features
+**C2. RAG brain (System 4)**:
+- Server fn `askCoach` takes user message → embeds (via Lovable AI Gateway embeddings) → calls `match_coach_brain` RPC on the external coach-brain Supabase → injects top chunks into a "Digital Nathy" system prompt → returns answer.
+- Replaces current coach-brain string.
 
-- **Mic input**: hold-to-record mic button using `window.SpeechRecognition` / `webkitSpeechRecognition`. Auto-language detect via `navigator.language`. Swipe-left to cancel. Mobile-safe.
-- **Speaker output**: `window.speechSynthesis` with language picked from a quick heuristic on the message text. Gold icon, red stop icon while playing.
-- Graceful fallback if browser lacks support (button hidden + toast).
+**C3. Escalation (System 13)**:
+- Track `stuck_count` per session; after 2 consecutive "stuck" or 14 days no progress → coach reply includes TidyCal link + fires Telegram alert.
 
-## 6. LiveKit call
+---
 
-`startCall` server function mints a LiveKit JWT (using `livekit-server-sdk`) with the student's identity, then returns `{ url, token }`. Client connects via `livekit-client`, shows the call screen with a countdown that ticks down from remaining minutes, auto-disconnects at 00:00, opens recharge modal.
+## Phase D — Student dashboard & engagement (Systems 10, 11, 5 partial)
 
-Minute deduction order: deplete `daily_free_minutes_used` (cap 5/day, resets via `daily_free_minutes_reset_date`) before `purchased_minutes_balance`. Logged in `voice_call_log`.
+**D1. Dashboard (System 10)** — new component in `_authenticated/portal`:
+- Welcome, current goal, module X of 6, day-N counter, today's coach minutes remaining, "next step from last session" pulled from latest `coach_sessions.action_step`.
+- CTAs: TALK TO COACH / CONTINUE COURSE.
 
-The LiveKit **agent** itself (the AI voice on the other side of the room) is a separate worker process. I'll assume your agent ID `CA_ad42h7xUxBtk` is already deployed in LiveKit Cloud and dispatch it on room creation. If it isn't deployed, the room will work but no AI will join — flag if you need help wiring the agent worker.
+**D2. Streaks (System 11)**:
+- On login / lesson complete / coach chat → upsert `streaks` (increment if `last_active = today-1`, reset if older).
+- Display flame + streak count on dashboard.
+- Daily 9pm WAT cron: if `last_active < today` and streak was ≥2 → Resend "don't break your streak" email.
 
-## 7. Recharge — Monnify
+**D3. Per-event Telegram alerts (System 5)**:
+- Hooks in: payment approve, module complete (from Systeme.io webhook), course complete, trial-expiring-in-2d (daily cron), inactive-7d (daily cron — includes "Message on WhatsApp" button).
 
-`initRecharge` server function creates a Monnify transaction (₦100/₦300/₦500 → 5/20/45 mins) using `MONNIFY_API_KEY` + `MONNIFY_SECRET_KEY` + `MONNIFY_CONTRACT_CODE`, returns checkout URL. A webhook at `/api/public/monnify-webhook` (already scoped under `api/public`) credits `purchased_minutes_balance` on success.
+---
 
-## 8. Action buttons
+## Phase E — Reporting & analytics (Systems 6, 8, 12)
 
-Implemented as you specified — modal prompts for objection / script, direct WhatsApp deeplinks for SOS / Talk to Nathy / Inner Circle (groups & numbers from the brief).
+**E1. Daily morning report (System 6)** — pg_cron 8AM WAT → public route → aggregates → Telegram message.
 
-## 9. Trial expiry overlay
+**E2. Weekly success prediction (System 12)** — pg_cron Mon 8AM WAT → per-student scoring (logins, coach sessions, days since signup) → bucket High/Medium/Low → AT RISK / HIGH POTENTIAL flags → Telegram with WhatsApp deep-link buttons.
 
-Computed client-side from `trial_end` + `inner_circle_status`. Shows the "TRIAL ENDED" overlay with the Inner Circle CTA (Monnify ₦1,000/mo subscription link).
+**E3. Google Analytics (System 8)** — gtag snippet in `__root.tsx` head with `G-YJ90XMTRGC`.
 
-## 10. Out of scope for this turn
+---
 
-- Keep-alive cron (Part 1)
-- Homepage fixes (Part 2)
-- Ask Nathy public widget (Part 3)
-- Email rewrites + Resend wiring (Part 2 Fix 4)
-- Trial reminder emails (Part 4 Step 7 emails)
-- PDF RAG ingestion of the two brain PDFs
-- Inner Circle subscription billing/recurrence (only one-off N1,000 link in this pass)
+## Technical notes
 
-## Confirm
+- All cron jobs use `pg_cron` + `pg_net` hitting `/api/public/hooks/*` (anon-key `apikey` header per Lovable conventions).
+- WAT timestamps stored as `timestamptz` (UTC); formatted to `Africa/Lagos` only at the edge (Telegram messages, emails, UI).
+- Telegram inline-keyboard callbacks use a derived secret token (sha256 of bot token) — same pattern as the Telegram knowledge file.
+- Receipt hash = sha256 of the uploaded file bytes; computed in `verifyPayment` server fn before Gemini call.
+- External coach-brain Supabase gets its own browser-safe client at `src/integrations/coach-brain/client.ts`.
+- The Lovable AI Gateway covers both chat (`google/gemini-3-flash-preview`) and embeddings (`google/gemini-embedding-001`) — no Groq/Gemini direct keys needed for the coach. Keep `GEMINI_API_KEY` only for receipt Vision (current code).
 
-1. **OK to use anonymous Supabase auth** under the hood (recommended) vs pure localStorage-only?
-2. **Are you OK with `llama-3.1-8b-instant`** in place of the deprecated `llama3-8b-8192`?
-3. **PDF RAG now or later?** (Later is much faster to ship.)
+## Suggested build order (so you can ship in chunks)
 
-Once you answer, I'll execute the plan in one go.
+1. Phase A (foundations) — ~1 turn.
+2. Phase B (payments + Telegram + Systeme + upsell) — biggest user-visible win.
+3. Phase E.3 (GA) — trivial drop-in.
+4. Phase C (voice + RAG) — once LiveKit secret is rotated.
+5. Phase D (dashboard + streaks).
+6. Phase E.1 + E.2 (cron reports).
+
+---
+
+## What I need from you to start
+
+Reply with:
+- Answers to the 7 blockers above (especially Systeme course/tag IDs + confirmation to drop Paystack/Vapi).
+- Approval to begin Phase A (I'll request all required secrets in one prompt right after).
