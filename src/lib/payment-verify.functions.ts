@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { createHash } from "crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { sendPhoto, escapeHtml, formatWAT } from "@/lib/telegram.server";
 
 const PAYMENT_TYPES = {
   course: { amount: 9997, label: "Course" },
@@ -113,11 +115,25 @@ export const verifyPayment = createServerFn({ method: "POST" })
     }
     const buf = Buffer.from(await file.arrayBuffer());
     const base64 = buf.toString("base64");
+    const receiptHash = createHash("sha256").update(buf).digest("hex");
+
+    // Hash-based duplicate detection (works even when AI can't read tx ref)
+    const { data: hashDup } = await supabaseAdmin
+      .from("payment_verifications")
+      .select("id")
+      .eq("receipt_sha256", receiptHash)
+      .maybeSingle();
+    if (hashDup) {
+      return {
+        status: "duplicate" as const,
+        message: "This exact receipt has already been submitted. WhatsApp us at 09164266235 if you believe this is an error.",
+      };
+    }
 
     // Run Gemini Vision
     const result = await callGemini(base64, data.receipt_mime, cfg.amount);
 
-    // Duplicate detection
+    // Reference-based duplicate detection (secondary)
     if (result.transaction_reference) {
       const { data: dup } = await supabaseAdmin
         .from("payment_verifications")
@@ -142,62 +158,76 @@ export const verifyPayment = createServerFn({ method: "POST" })
     if (amountOk && acctOk && successOk) confidence = Math.max(confidence, 90);
     if (!amountOk || !acctOk) confidence = Math.min(confidence, 60);
 
-    if (confidence >= 85 && amountOk && acctOk) verdict = "verified";
-    else if (confidence < 40) verdict = "rejected";
+    // Manual review only — Telegram admin must always tap APPROVE/REJECT
+    // (per System 1 spec). Don't auto-verify even on high confidence.
+    if (confidence < 40) verdict = "rejected";
 
     // Save record
-    await supabaseAdmin.from("payment_verifications").insert({
-      full_name: data.full_name,
-      email: data.email,
-      whatsapp: data.whatsapp,
-      network: data.network ?? null,
-      payment_type: data.payment_type,
-      expected_amount_ngn: cfg.amount,
-      receipt_url: data.receipt_path,
-      transaction_reference: result.transaction_reference ?? null,
-      ai_confidence: confidence,
-      ai_notes: result.notes,
-      status: verdict,
-    });
+    const { data: inserted } = await supabaseAdmin
+      .from("payment_verifications")
+      .insert({
+        full_name: data.full_name,
+        email: data.email,
+        whatsapp: data.whatsapp,
+        network: data.network ?? null,
+        payment_type: data.payment_type,
+        expected_amount_ngn: cfg.amount,
+        receipt_url: data.receipt_path,
+        receipt_sha256: receiptHash,
+        transaction_reference: result.transaction_reference ?? null,
+        ai_confidence: confidence,
+        ai_notes: result.notes,
+        status: verdict,
+      })
+      .select("id")
+      .single();
 
-    // Notify admin on uncertain / rejected
-    const resendKey = process.env.RESEND_API_KEY;
-    if (resendKey && verdict !== "verified") {
+    // Build a signed URL so Telegram can fetch the (private) receipt
+    let receiptUrl: string | null = null;
+    try {
+      const signed = await supabaseAdmin.storage
+        .from("receipts")
+        .createSignedUrl(data.receipt_path, 60 * 60 * 24 * 30); // 30 days
+      receiptUrl = signed.data?.signedUrl ?? null;
+    } catch (e) {
+      console.warn("signed receipt url failed", e);
+    }
+
+    // Send Telegram admin alert with APPROVE / REJECT buttons
+    if (inserted?.id && verdict !== "rejected") {
+      const caption =
+        `<b>💳 NEW PAYMENT — needs review</b>\n\n` +
+        `👤 <b>${escapeHtml(data.full_name)}</b>\n` +
+        `✉️ ${escapeHtml(data.email)}\n` +
+        `📱 ${escapeHtml(data.whatsapp)}\n` +
+        `💰 ₦${cfg.amount.toLocaleString()} — ${escapeHtml(cfg.label)}\n` +
+        `🤖 AI: ${confidence}% — ${escapeHtml(result.notes || "(no notes)")}\n` +
+        (result.transaction_reference ? `🔗 Ref: <code>${escapeHtml(result.transaction_reference)}</code>\n` : "") +
+        `🕒 ${formatWAT(new Date())}`;
+      const reply_markup = {
+        inline_keyboard: [
+          [
+            { text: "✅ APPROVE", callback_data: `approve:${inserted.id}` },
+            { text: "❌ REJECT", callback_data: `reject:${inserted.id}` },
+          ],
+        ],
+      };
       try {
-        await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${resendKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            from: "K2C Academy <onboarding@resend.dev>",
-            to: ["k2cacademy001@gmail.com"],
-            subject: `⚠️ Manual Payment Verification — ${data.full_name}`,
-            html: `<p><strong>${data.full_name}</strong> submitted a receipt for ${cfg.label} (₦${cfg.amount}).</p>
-              <ul>
-                <li>Email: ${data.email}</li>
-                <li>WhatsApp: ${data.whatsapp}</li>
-                <li>Verdict: ${verdict} (confidence ${confidence}%)</li>
-                <li>AI notes: ${result.notes}</li>
-                <li>Tx ref: ${result.transaction_reference ?? "—"}</li>
-              </ul>`,
-          }),
-        });
+        const msg = receiptUrl
+          ? await sendPhoto({ photo_url: receiptUrl, caption, reply_markup })
+          : await (await import("@/lib/telegram.server")).sendMessage({ text: caption, reply_markup });
+        await supabaseAdmin
+          .from("payment_verifications")
+          .update({
+            notified_telegram_at: new Date().toISOString(),
+            telegram_message_id: msg.message_id,
+          })
+          .eq("id", inserted.id);
       } catch (e) {
-        console.error("admin email failed", e);
+        console.error("Telegram alert failed", e);
       }
     }
 
-    if (verdict === "verified") {
-      return {
-        status: "verified" as const,
-        message: "Payment Verified! Welcome! 🎉",
-        next: data.payment_type === "course"
-          ? "Your student access code: K2Ç-STUDENT. Head to the Student Portal to log in."
-          : "Your Inner Circle is being activated — check your email shortly.",
-      };
-    }
     if (verdict === "rejected") {
       return {
         status: "rejected" as const,
@@ -206,6 +236,6 @@ export const verifyPayment = createServerFn({ method: "POST" })
     }
     return {
       status: "review" as const,
-      message: "We're reviewing your payment manually — usually within 30 minutes. WhatsApp 09164266235 if urgent.",
+      message: "Got it! 🎉 Submitted for approval — you'll get an email within minutes. WhatsApp 09164266235 if urgent.",
     };
   });

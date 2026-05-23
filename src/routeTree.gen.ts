@@ -18,6 +18,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedPortalRouteImport } from './routes/_authenticated/portal'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as ApiPublicMonnifyWebhookRouteImport } from './routes/api/public/monnify-webhook'
+import { Route as ApiPublicHooksTelegramWebhookRouteImport } from './routes/api/public/hooks/telegram-webhook'
+import { Route as ApiPublicHooksSystemeioWebhookRouteImport } from './routes/api/public/hooks/systemeio-webhook'
 import { Route as ApiPublicHooksMonthlyNewsletterRouteImport } from './routes/api/public/hooks/monthly-newsletter'
 import { Route as ApiPublicHooksKeepAliveRouteImport } from './routes/api/public/hooks/keep-alive'
 import { Route as ApiPublicHooksBudgetSummaryRouteImport } from './routes/api/public/hooks/budget-summary'
@@ -67,6 +69,18 @@ const ApiPublicMonnifyWebhookRoute = ApiPublicMonnifyWebhookRouteImport.update({
   path: '/api/public/monnify-webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHooksTelegramWebhookRoute =
+  ApiPublicHooksTelegramWebhookRouteImport.update({
+    id: '/api/public/hooks/telegram-webhook',
+    path: '/api/public/hooks/telegram-webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksSystemeioWebhookRoute =
+  ApiPublicHooksSystemeioWebhookRouteImport.update({
+    id: '/api/public/hooks/systemeio-webhook',
+    path: '/api/public/hooks/systemeio-webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksMonthlyNewsletterRoute =
   ApiPublicHooksMonthlyNewsletterRouteImport.update({
     id: '/api/public/hooks/monthly-newsletter',
@@ -104,6 +118,8 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/budget-summary': typeof ApiPublicHooksBudgetSummaryRoute
   '/api/public/hooks/keep-alive': typeof ApiPublicHooksKeepAliveRoute
   '/api/public/hooks/monthly-newsletter': typeof ApiPublicHooksMonthlyNewsletterRoute
+  '/api/public/hooks/systemeio-webhook': typeof ApiPublicHooksSystemeioWebhookRoute
+  '/api/public/hooks/telegram-webhook': typeof ApiPublicHooksTelegramWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -118,6 +134,8 @@ export interface FileRoutesByTo {
   '/api/public/hooks/budget-summary': typeof ApiPublicHooksBudgetSummaryRoute
   '/api/public/hooks/keep-alive': typeof ApiPublicHooksKeepAliveRoute
   '/api/public/hooks/monthly-newsletter': typeof ApiPublicHooksMonthlyNewsletterRoute
+  '/api/public/hooks/systemeio-webhook': typeof ApiPublicHooksSystemeioWebhookRoute
+  '/api/public/hooks/telegram-webhook': typeof ApiPublicHooksTelegramWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -134,6 +152,8 @@ export interface FileRoutesById {
   '/api/public/hooks/budget-summary': typeof ApiPublicHooksBudgetSummaryRoute
   '/api/public/hooks/keep-alive': typeof ApiPublicHooksKeepAliveRoute
   '/api/public/hooks/monthly-newsletter': typeof ApiPublicHooksMonthlyNewsletterRoute
+  '/api/public/hooks/systemeio-webhook': typeof ApiPublicHooksSystemeioWebhookRoute
+  '/api/public/hooks/telegram-webhook': typeof ApiPublicHooksTelegramWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -150,6 +170,8 @@ export interface FileRouteTypes {
     | '/api/public/hooks/budget-summary'
     | '/api/public/hooks/keep-alive'
     | '/api/public/hooks/monthly-newsletter'
+    | '/api/public/hooks/systemeio-webhook'
+    | '/api/public/hooks/telegram-webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -164,6 +186,8 @@ export interface FileRouteTypes {
     | '/api/public/hooks/budget-summary'
     | '/api/public/hooks/keep-alive'
     | '/api/public/hooks/monthly-newsletter'
+    | '/api/public/hooks/systemeio-webhook'
+    | '/api/public/hooks/telegram-webhook'
   id:
     | '__root__'
     | '/'
@@ -179,6 +203,8 @@ export interface FileRouteTypes {
     | '/api/public/hooks/budget-summary'
     | '/api/public/hooks/keep-alive'
     | '/api/public/hooks/monthly-newsletter'
+    | '/api/public/hooks/systemeio-webhook'
+    | '/api/public/hooks/telegram-webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -193,6 +219,8 @@ export interface RootRouteChildren {
   ApiPublicHooksBudgetSummaryRoute: typeof ApiPublicHooksBudgetSummaryRoute
   ApiPublicHooksKeepAliveRoute: typeof ApiPublicHooksKeepAliveRoute
   ApiPublicHooksMonthlyNewsletterRoute: typeof ApiPublicHooksMonthlyNewsletterRoute
+  ApiPublicHooksSystemeioWebhookRoute: typeof ApiPublicHooksSystemeioWebhookRoute
+  ApiPublicHooksTelegramWebhookRoute: typeof ApiPublicHooksTelegramWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -260,6 +288,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicMonnifyWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/telegram-webhook': {
+      id: '/api/public/hooks/telegram-webhook'
+      path: '/api/public/hooks/telegram-webhook'
+      fullPath: '/api/public/hooks/telegram-webhook'
+      preLoaderRoute: typeof ApiPublicHooksTelegramWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/systemeio-webhook': {
+      id: '/api/public/hooks/systemeio-webhook'
+      path: '/api/public/hooks/systemeio-webhook'
+      fullPath: '/api/public/hooks/systemeio-webhook'
+      preLoaderRoute: typeof ApiPublicHooksSystemeioWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/monthly-newsletter': {
       id: '/api/public/hooks/monthly-newsletter'
       path: '/api/public/hooks/monthly-newsletter'
@@ -317,6 +359,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksBudgetSummaryRoute: ApiPublicHooksBudgetSummaryRoute,
   ApiPublicHooksKeepAliveRoute: ApiPublicHooksKeepAliveRoute,
   ApiPublicHooksMonthlyNewsletterRoute: ApiPublicHooksMonthlyNewsletterRoute,
+  ApiPublicHooksSystemeioWebhookRoute: ApiPublicHooksSystemeioWebhookRoute,
+  ApiPublicHooksTelegramWebhookRoute: ApiPublicHooksTelegramWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

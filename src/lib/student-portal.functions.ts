@@ -5,6 +5,7 @@ import { createHash, randomUUID } from "crypto";
 import { AccessToken, AgentDispatchClient } from "livekit-server-sdk";
 import { RoomConfiguration, RoomAgentDispatch } from "@livekit/protocol";
 import { COACH_SYSTEM_PROMPT } from "./coach-brain";
+import { fetchBrainContext } from "./coach-brain-rag.server";
 
 // ============================================================
 // Session model: after a student enters the right code, the
@@ -133,8 +134,12 @@ export const sendCoachMessage = createServerFn({ method: "POST" })
       "Always acknowledge their feeling FIRST in one short human sentence ('I hear you', 'that's heavy', 'totally get it'), then give ONE concrete next step focused on getting them their first sale today. " +
       "Natural pace. Use commas and short sentences so the pauses feel human. " +
       "STRICT: Maximum 2 short sentences, under 35 words total. No lists. No emojis. No markdown. No headings. Plain spoken language only.";
+
+    // RAG: fetch top brain chunks for THIS user message
+    const brainContext = await fetchBrainContext(data.message, 4);
+
     const messages = [
-      { role: "system", content: COACH_SYSTEM + (data.voice ? voiceAddendum : "") },
+      { role: "system", content: COACH_SYSTEM + brainContext + (data.voice ? voiceAddendum : "") },
       ...(history ?? []).reverse().map((m) => ({ role: m.role, content: m.content })),
     ];
 

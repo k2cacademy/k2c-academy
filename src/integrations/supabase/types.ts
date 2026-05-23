@@ -322,6 +322,72 @@ export type Database = {
         }
         Relationships: []
       }
+      coach_sessions: {
+        Row: {
+          action_step: string | null
+          channel: string
+          created_at: string
+          duration_seconds: number
+          escalated: boolean
+          id: string
+          mood: string | null
+          session_date: string
+          stuck_count: number
+          summary: string | null
+          user_id: string
+        }
+        Insert: {
+          action_step?: string | null
+          channel?: string
+          created_at?: string
+          duration_seconds?: number
+          escalated?: boolean
+          id?: string
+          mood?: string | null
+          session_date?: string
+          stuck_count?: number
+          summary?: string | null
+          user_id: string
+        }
+        Update: {
+          action_step?: string | null
+          channel?: string
+          created_at?: string
+          duration_seconds?: number
+          escalated?: boolean
+          id?: string
+          mood?: string | null
+          session_date?: string
+          stuck_count?: number
+          summary?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      daily_report_log: {
+        Row: {
+          id: string
+          payload: Json | null
+          report_date: string
+          report_type: string
+          sent_at: string
+        }
+        Insert: {
+          id?: string
+          payload?: Json | null
+          report_date: string
+          report_type: string
+          sent_at?: string
+        }
+        Update: {
+          id?: string
+          payload?: Json | null
+          report_date?: string
+          report_type?: string
+          sent_at?: string
+        }
+        Relationships: []
+      }
       flutterwave_webhooks: {
         Row: {
           amount_ngn: number | null
@@ -425,17 +491,23 @@ export type Database = {
         Row: {
           ai_confidence: number
           ai_notes: string | null
+          approval_actor: string | null
+          approved_at: string | null
           created_at: string
           email: string
           expected_amount_ngn: number
           full_name: string
           id: string
           network: string | null
+          notified_telegram_at: string | null
           payment_type: string
+          receipt_sha256: string | null
           receipt_url: string
+          rejected_at: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           status: string
+          telegram_message_id: number | null
           transaction_reference: string | null
           user_id: string | null
           whatsapp: string
@@ -443,17 +515,23 @@ export type Database = {
         Insert: {
           ai_confidence?: number
           ai_notes?: string | null
+          approval_actor?: string | null
+          approved_at?: string | null
           created_at?: string
           email: string
           expected_amount_ngn: number
           full_name: string
           id?: string
           network?: string | null
+          notified_telegram_at?: string | null
           payment_type: string
+          receipt_sha256?: string | null
           receipt_url: string
+          rejected_at?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
+          telegram_message_id?: number | null
           transaction_reference?: string | null
           user_id?: string | null
           whatsapp: string
@@ -461,17 +539,23 @@ export type Database = {
         Update: {
           ai_confidence?: number
           ai_notes?: string | null
+          approval_actor?: string | null
+          approved_at?: string | null
           created_at?: string
           email?: string
           expected_amount_ngn?: number
           full_name?: string
           id?: string
           network?: string | null
+          notified_telegram_at?: string | null
           payment_type?: string
+          receipt_sha256?: string | null
           receipt_url?: string
+          rejected_at?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
+          telegram_message_id?: number | null
           transaction_reference?: string | null
           user_id?: string | null
           whatsapp?: string
@@ -511,6 +595,33 @@ export type Database = {
         }
         Relationships: []
       }
+      streaks: {
+        Row: {
+          current_streak: number
+          last_active: string | null
+          longest_streak: number
+          student_email: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          current_streak?: number
+          last_active?: string | null
+          longest_streak?: number
+          student_email?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          current_streak?: number
+          last_active?: string | null
+          longest_streak?: number
+          student_email?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       student_chat_messages: {
         Row: {
           content: string
@@ -532,6 +643,36 @@ export type Database = {
           id?: string
           role?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      student_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json
+          module_name: string | null
+          student_email: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json
+          module_name?: string | null
+          student_email: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json
+          module_name?: string | null
+          student_email?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -560,6 +701,8 @@ export type Database = {
           phone_number: string | null
           purchased_minutes_balance: number
           secret_code_role: string | null
+          status: string
+          tags: string[]
           trial_end: string | null
           trial_start: string | null
           updated_at: string
@@ -590,6 +733,8 @@ export type Database = {
           phone_number?: string | null
           purchased_minutes_balance?: number
           secret_code_role?: string | null
+          status?: string
+          tags?: string[]
           trial_end?: string | null
           trial_start?: string | null
           updated_at?: string
@@ -620,6 +765,8 @@ export type Database = {
           phone_number?: string | null
           purchased_minutes_balance?: number
           secret_code_role?: string | null
+          status?: string
+          tags?: string[]
           trial_end?: string | null
           trial_start?: string | null
           updated_at?: string
@@ -664,6 +811,87 @@ export type Database = {
           star_rating?: number
           what_they_sell?: string
           win_story?: string
+        }
+        Relationships: []
+      }
+      systemeio_events: {
+        Row: {
+          event_type: string
+          id: string
+          payload: Json
+          received_at: string
+          student_email: string | null
+        }
+        Insert: {
+          event_type: string
+          id?: string
+          payload: Json
+          received_at?: string
+          student_email?: string | null
+        }
+        Update: {
+          event_type?: string
+          id?: string
+          payload?: Json
+          received_at?: string
+          student_email?: string | null
+        }
+        Relationships: []
+      }
+      telegram_actions: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          raw_callback: Json
+          result: string | null
+          target_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          raw_callback: Json
+          result?: string | null
+          target_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          raw_callback?: Json
+          result?: string | null
+          target_id?: string | null
+        }
+        Relationships: []
+      }
+      upsells: {
+        Row: {
+          accepted: boolean
+          amount_ngn: number | null
+          created_at: string
+          id: string
+          offer: string
+          student_email: string
+          user_id: string | null
+        }
+        Insert: {
+          accepted?: boolean
+          amount_ngn?: number | null
+          created_at?: string
+          id?: string
+          offer: string
+          student_email: string
+          user_id?: string | null
+        }
+        Update: {
+          accepted?: boolean
+          amount_ngn?: number | null
+          created_at?: string
+          id?: string
+          offer?: string
+          student_email?: string
+          user_id?: string | null
         }
         Relationships: []
       }
