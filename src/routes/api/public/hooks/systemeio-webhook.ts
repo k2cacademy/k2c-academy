@@ -41,7 +41,8 @@ export const Route = createFileRoute("/api/public/hooks/systemeio-webhook")({
         await supabaseAdmin.from("systemeio_events").insert({
           event_type: event,
           student_email: email,
-          payload: payload as unknown as Record<string, unknown>,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          payload: payload as any,
         });
 
         if (email) {
@@ -53,7 +54,8 @@ export const Route = createFileRoute("/api/public/hooks/systemeio-webhook")({
             student_email: email,
             event_type: event,
             module_name: moduleName,
-            metadata: (payload.data ?? {}) as Record<string, unknown>,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            metadata: (payload.data ?? {}) as any,
           });
 
           // Telegram alerts for key events

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { randomUUID } from "crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
   verifyWebhookHeader,
@@ -66,6 +67,7 @@ async function approve(verificationId: string): Promise<string> {
       .eq("user_id", existing.user_id);
   } else {
     await supabaseAdmin.from("student_profiles").insert({
+      user_id: randomUUID(),
       email: v.email,
       full_name: v.full_name,
       first_name: v.full_name.split(" ")[0] ?? null,
@@ -176,7 +178,8 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
         await supabaseAdmin.from("telegram_actions").insert({
           action,
           target_id: id,
-          raw_callback: cb as unknown as Record<string, unknown>,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          raw_callback: cb as any,
           result,
         });
 
