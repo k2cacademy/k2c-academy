@@ -1,39 +1,41 @@
 import { useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
-import { CheckCircle2, FileText } from "lucide-react";
-import { toast } from "sonner";
+import { FileText, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { submitLead } from "@/lib/leads.functions";
+import { toast } from "sonner";
 
 export function LeadMagnet() {
-  const submit = useServerFn(submitLead);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const payload = {
-      name: String(fd.get("name") || "").trim(),
-      email: String(fd.get("email") || "").trim(),
-      whatsapp: String(fd.get("whatsapp") || "").trim(),
-    };
+    const name = String(fd.get("name") || "").trim();
+    const email = String(fd.get("email") || "").trim();
+    const whatsapp = String(fd.get("whatsapp") || "").trim();
 
-    if (!payload.name || !payload.email) {
+    if (!name || !email) {
       toast.error("Please add your name and email.");
       return;
     }
 
     try {
       setSubmitting(true);
-      await submit({ data: payload });
+      const response = await fetch("/api/public/send-lead-magnet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, whatsapp }),
+      });
+
+      if (!response.ok) throw new Error("Failed to send");
+
       setDone(true);
       toast.success("Check your email! Your free guide is on its way 🎉");
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : "Something went wrong. Try again.");
+      toast.error("Something went wrong. Try again.");
     } finally {
       setSubmitting(false);
     }
@@ -132,4 +134,4 @@ export function LeadMagnet() {
       </div>
     </section>
   );
-}
+                    }
