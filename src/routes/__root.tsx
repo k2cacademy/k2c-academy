@@ -94,8 +94,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "description", content: "K2Ç Launchpad is a Nigerian digital education website that helps beginners earn online." },
       { property: "og:description", content: "K2Ç Launchpad is a Nigerian digital education website that helps beginners earn online." },
       { name: "twitter:description", content: "K2Ç Launchpad is a Nigerian digital education website that helps beginners earn online." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/L69RvGmZPZRBjuKpWN9z40sumpR2/social-images/social-1778566720622-1001522950.webp" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/L69RvGmZPZRBjuKpWN9z40sumpR2/social-images/social-1778566720622-1001522950.webp" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/a7dfe147-823b-4600-96e7-0a62f15fb4ed" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/a7dfe147-823b-4600-96e7-0a62f15fb4ed" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
