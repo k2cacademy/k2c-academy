@@ -13,10 +13,12 @@ import { Route as VerifyPaymentRouteImport } from './routes/verify-payment'
 import { Route as StudentPortalRouteImport } from './routes/student-portal'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AdminPanelRouteImport } from './routes/admin-panel'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedPortalRouteImport } from './routes/_authenticated/portal'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as ApiPublicSendLeadMagnetRouteImport } from './routes/api/public/send-lead-magnet'
 import { Route as ApiPublicMonnifyWebhookRouteImport } from './routes/api/public/monnify-webhook'
 import { Route as ApiPublicHooksTelegramWebhookRouteImport } from './routes/api/public/hooks/telegram-webhook'
 import { Route as ApiPublicHooksSystemeioWebhookRouteImport } from './routes/api/public/hooks/systemeio-webhook'
@@ -47,6 +49,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminPanelRoute = AdminPanelRouteImport.update({
+  id: '/admin-panel',
+  path: '/admin-panel',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
@@ -65,6 +72,11 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
   getParentRoute: () => AuthenticatedRoute,
+} as any)
+const ApiPublicSendLeadMagnetRoute = ApiPublicSendLeadMagnetRouteImport.update({
+  id: '/api/public/send-lead-magnet',
+  path: '/api/public/send-lead-magnet',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicMonnifyWebhookRoute = ApiPublicMonnifyWebhookRouteImport.update({
   id: '/api/public/monnify-webhook',
@@ -121,6 +133,7 @@ const ApiPublicHooksBirthdayGiftsRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin-panel': typeof AdminPanelRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/student-portal': typeof StudentPortalRoute
@@ -128,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthenticatedAdminRoute
   '/portal': typeof AuthenticatedPortalRoute
   '/api/public/monnify-webhook': typeof ApiPublicMonnifyWebhookRoute
+  '/api/public/send-lead-magnet': typeof ApiPublicSendLeadMagnetRoute
   '/api/public/hooks/birthday-gifts': typeof ApiPublicHooksBirthdayGiftsRoute
   '/api/public/hooks/budget-summary': typeof ApiPublicHooksBudgetSummaryRoute
   '/api/public/hooks/keep-alive': typeof ApiPublicHooksKeepAliveRoute
@@ -139,6 +153,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin-panel': typeof AdminPanelRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/student-portal': typeof StudentPortalRoute
@@ -146,6 +161,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AuthenticatedAdminRoute
   '/portal': typeof AuthenticatedPortalRoute
   '/api/public/monnify-webhook': typeof ApiPublicMonnifyWebhookRoute
+  '/api/public/send-lead-magnet': typeof ApiPublicSendLeadMagnetRoute
   '/api/public/hooks/birthday-gifts': typeof ApiPublicHooksBirthdayGiftsRoute
   '/api/public/hooks/budget-summary': typeof ApiPublicHooksBudgetSummaryRoute
   '/api/public/hooks/keep-alive': typeof ApiPublicHooksKeepAliveRoute
@@ -159,6 +175,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/admin-panel': typeof AdminPanelRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/student-portal': typeof StudentPortalRoute
@@ -166,6 +183,7 @@ export interface FileRoutesById {
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/portal': typeof AuthenticatedPortalRoute
   '/api/public/monnify-webhook': typeof ApiPublicMonnifyWebhookRoute
+  '/api/public/send-lead-magnet': typeof ApiPublicSendLeadMagnetRoute
   '/api/public/hooks/birthday-gifts': typeof ApiPublicHooksBirthdayGiftsRoute
   '/api/public/hooks/budget-summary': typeof ApiPublicHooksBudgetSummaryRoute
   '/api/public/hooks/keep-alive': typeof ApiPublicHooksKeepAliveRoute
@@ -179,6 +197,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin-panel'
     | '/login'
     | '/signup'
     | '/student-portal'
@@ -186,6 +205,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/portal'
     | '/api/public/monnify-webhook'
+    | '/api/public/send-lead-magnet'
     | '/api/public/hooks/birthday-gifts'
     | '/api/public/hooks/budget-summary'
     | '/api/public/hooks/keep-alive'
@@ -197,6 +217,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin-panel'
     | '/login'
     | '/signup'
     | '/student-portal'
@@ -204,6 +225,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/portal'
     | '/api/public/monnify-webhook'
+    | '/api/public/send-lead-magnet'
     | '/api/public/hooks/birthday-gifts'
     | '/api/public/hooks/budget-summary'
     | '/api/public/hooks/keep-alive'
@@ -216,6 +238,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/admin-panel'
     | '/login'
     | '/signup'
     | '/student-portal'
@@ -223,6 +246,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin'
     | '/_authenticated/portal'
     | '/api/public/monnify-webhook'
+    | '/api/public/send-lead-magnet'
     | '/api/public/hooks/birthday-gifts'
     | '/api/public/hooks/budget-summary'
     | '/api/public/hooks/keep-alive'
@@ -236,11 +260,13 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  AdminPanelRoute: typeof AdminPanelRoute
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
   StudentPortalRoute: typeof StudentPortalRoute
   VerifyPaymentRoute: typeof VerifyPaymentRoute
   ApiPublicMonnifyWebhookRoute: typeof ApiPublicMonnifyWebhookRoute
+  ApiPublicSendLeadMagnetRoute: typeof ApiPublicSendLeadMagnetRoute
   ApiPublicHooksBirthdayGiftsRoute: typeof ApiPublicHooksBirthdayGiftsRoute
   ApiPublicHooksBudgetSummaryRoute: typeof ApiPublicHooksBudgetSummaryRoute
   ApiPublicHooksKeepAliveRoute: typeof ApiPublicHooksKeepAliveRoute
@@ -281,6 +307,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin-panel': {
+      id: '/admin-panel'
+      path: '/admin-panel'
+      fullPath: '/admin-panel'
+      preLoaderRoute: typeof AdminPanelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
@@ -308,6 +341,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin'
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRoute
+    }
+    '/api/public/send-lead-magnet': {
+      id: '/api/public/send-lead-magnet'
+      path: '/api/public/send-lead-magnet'
+      fullPath: '/api/public/send-lead-magnet'
+      preLoaderRoute: typeof ApiPublicSendLeadMagnetRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/monnify-webhook': {
       id: '/api/public/monnify-webhook'
@@ -392,11 +432,13 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  AdminPanelRoute: AdminPanelRoute,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
   StudentPortalRoute: StudentPortalRoute,
   VerifyPaymentRoute: VerifyPaymentRoute,
   ApiPublicMonnifyWebhookRoute: ApiPublicMonnifyWebhookRoute,
+  ApiPublicSendLeadMagnetRoute: ApiPublicSendLeadMagnetRoute,
   ApiPublicHooksBirthdayGiftsRoute: ApiPublicHooksBirthdayGiftsRoute,
   ApiPublicHooksBudgetSummaryRoute: ApiPublicHooksBudgetSummaryRoute,
   ApiPublicHooksKeepAliveRoute: ApiPublicHooksKeepAliveRoute,
