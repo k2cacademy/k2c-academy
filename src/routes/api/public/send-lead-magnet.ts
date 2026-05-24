@@ -23,7 +23,7 @@ export const Route = createFileRoute("/api/public/send-lead-magnet")({
             body: JSON.stringify({
               sender: {
                 name: "Digital Nathy",
-                email: "k2cacademy001@gmail.com",
+                email: "oniahemmanuel@gmail.com",
               },
               to: [{ email }],
               subject: "Your free K2Ç guide is here — plus one thing to know 🎁",
