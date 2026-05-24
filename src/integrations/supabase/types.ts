@@ -680,6 +680,7 @@ export type Database = {
         Row: {
           birthday: string | null
           birthday_md: string | null
+          book_edits_used: number
           certificate_issued: boolean
           created_at: string
           daily_free_minutes_reset_date: string
@@ -712,6 +713,7 @@ export type Database = {
         Insert: {
           birthday?: string | null
           birthday_md?: string | null
+          book_edits_used?: number
           certificate_issued?: boolean
           created_at?: string
           daily_free_minutes_reset_date?: string
@@ -744,6 +746,7 @@ export type Database = {
         Update: {
           birthday?: string | null
           birthday_md?: string | null
+          book_edits_used?: number
           certificate_issued?: boolean
           created_at?: string
           daily_free_minutes_reset_date?: string
