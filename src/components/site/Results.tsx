@@ -4,6 +4,7 @@ import { SectionLabel } from "./SectionLabel";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { ShareWinModal, ProofLightbox } from "./ShareWinModal";
+import digitalNathyImg from "@/assets/digital-nathy.jpg";
 
 type StudentResult = {
   id: string;
@@ -25,7 +26,7 @@ const FALLBACK: StudentResult[] = [
     win_story:
       "K2Ç Academy isn't about more lessons — it's about your first real result. Watch this space as student wins start dropping in.",
     sale_amount: null,
-    profile_photo_url: "",
+    profile_photo_url: digitalNathyImg,
     proof_image_url: null,
     star_rating: 5,
     date_submitted: new Date().toISOString(),
