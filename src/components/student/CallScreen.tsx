@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PhoneOff, Mic, MicOff, Loader2 } from "lucide-react";
 
-const VAPI_PUBLIC_KEY = "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1";
-const ASSISTANT_ID = "a16cf991-f420-44f4-8460-0129939c9fe3";
-
 export function CallScreen({
   session,
   firstName,
@@ -15,121 +12,139 @@ export function CallScreen({
   onClose: () => void;
   onNoMinutes: () => void;
 }) {
-  const [status, setStatus] = useState<"connecting" | "waiting-agent" | "connected" | "ending">("connecting");
-  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [status, setStatus] = useState<
+    "loading" | "connecting" | "waiting-agent" | "connected" | "ending"
+  >("loading");
+  const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [agentSpeaking, setAgentSpeaking] = useState(false);
 
   const vapiRef = useRef<any>(null);
-  const tickRef = useRef<any>(null);
-  const startedAtRef = useRef<number>(0);
+  const timerRef = useRef<any>(null);
   const endingRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    const initVapi = async () => {
-      try {
-        // Wait for Vapi SDK to load
+    const loadAndStart = () => {
+      // Remove any existing Vapi scripts
+      const existing = document.getElementById("vapi-script");
+      if (existing) existing.remove();
+
+      const script = document.createElement("script");
+      script.id = "vapi-script";
+      script.src =
+        "https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js";
+      script.async = true;
+
+      script.onload = async () => {
+        if (cancelled) return;
+
+        // Wait for vapiSDK to be available
         let attempts = 0;
-        while (!(window as any).Vapi && attempts < 20) {
-          await new Promise(r => setTimeout(r, 500));
+        while (!(window as any).vapiSDK && attempts < 20) {
+          await new Promise((r) => setTimeout(r, 300));
           attempts++;
         }
 
         if (cancelled) return;
 
-        const VapiSDK = (window as any).Vapi;
-        if (!VapiSDK) throw new Error("Voice system not available. Please refresh.");
+        const sdk = (window as any).vapiSDK;
+        if (!sdk) {
+          setError("Voice system failed to load. Please refresh.");
+          setStatus("ending");
+          return;
+        }
 
-        const vapi = new VapiSDK(VAPI_PUBLIC_KEY);
-        vapiRef.current = vapi;
+        try {
+          setStatus("connecting");
 
-        vapi.on("call-start", () => {
-          if (cancelled) return;
-          setStatus("waiting-agent");
-          startedAtRef.current = Date.now();
+          const vapi = sdk.run({
+            apiKey: "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1",
+            assistant: "a16cf991-f420-44f4-8460-0129939c9fe3",
+            config: { hideButton: true },
+          });
 
-          // Start countdown timer (default 10 mins)
-          tickRef.current = setInterval(() => {
-            setSecondsLeft(s => {
-              if (s <= 1) {
-                window.clearInterval(tickRef.current);
-                hangup(true);
-                return 0;
-              }
-              return s - 1;
-            });
-          }, 1000);
-        });
+          vapiRef.current = vapi;
 
-        vapi.on("speech-start", () => {
-          if (cancelled) return;
-          setAgentSpeaking(true);
-          setStatus("connected");
-        });
+          vapi.on("call-start", () => {
+            if (cancelled) return;
+            setStatus("waiting-agent");
+          });
 
-        vapi.on("speech-end", () => {
-          if (cancelled) return;
-          setAgentSpeaking(false);
-        });
+          vapi.on("speech-start", () => {
+            if (cancelled) return;
+            setAgentSpeaking(true);
+            setStatus("connected");
+            if (!timerRef.current) {
+              timerRef.current = setInterval(() => {
+                setDuration((d) => d + 1);
+              }, 1000);
+            }
+          });
 
-        vapi.on("call-end", () => {
-          if (!endingRef.current) hangup(false);
-        });
+          vapi.on("speech-end", () => {
+            if (cancelled) return;
+            setAgentSpeaking(false);
+          });
 
-        vapi.on("error", (e: any) => {
-          console.error("Vapi error:", e);
+          vapi.on("call-end", () => {
+            if (!endingRef.current) hangup(false);
+          });
+
+          vapi.on("error", (e: any) => {
+            console.error("Vapi error:", e);
+            if (!cancelled) {
+              setError(e?.message || "Call error. Please try again.");
+              setStatus("ending");
+            }
+          });
+        } catch (e: any) {
           if (!cancelled) {
-            setError(e?.message || "Call error occurred.");
+            setError(e?.message || "Could not start call.");
             setStatus("ending");
           }
-        });
+        }
+      };
 
-        // Start the call
-        await vapi.start(ASSISTANT_ID, {
-          metadata: {
-            student_name: firstName,
-            session,
-          },
-        });
-
-        // Set initial minutes (10 mins default)
-        setSecondsLeft(10 * 60);
-
-      } catch (e) {
+      script.onerror = () => {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Could not start the call.");
+          setError("Failed to load voice system. Check your connection.");
           setStatus("ending");
         }
-      }
+      };
+
+      document.head.appendChild(script);
+      setStatus("connecting");
     };
 
-    initVapi();
+    loadAndStart();
 
     return () => {
       cancelled = true;
       endingRef.current = true;
-      if (tickRef.current) window.clearInterval(tickRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
       if (vapiRef.current) {
-        try { vapiRef.current.stop(); } catch {}
+        try {
+          vapiRef.current.stop();
+        } catch {}
         vapiRef.current = null;
       }
     };
   }, []);
 
-  const hangup = async (timeUp = false) => {
+  const hangup = (timeUp = false) => {
     if (endingRef.current) return;
     endingRef.current = true;
     setStatus("ending");
-
-    if (tickRef.current) window.clearInterval(tickRef.current);
+    if (timerRef.current) clearInterval(timerRef.current);
     if (vapiRef.current) {
-      try { vapiRef.current.stop(); } catch {}
+      try {
+        vapiRef.current.stop();
+      } catch {}
       vapiRef.current = null;
     }
-
     onClose();
     if (timeUp) onNoMinutes();
   };
@@ -141,10 +156,11 @@ export function CallScreen({
     }
   };
 
-  const mm = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
-  const ss = String(secondsLeft % 60).padStart(2, "0");
+  const mm = String(Math.floor(duration / 60)).padStart(2, "0");
+  const ss = String(duration % 60).padStart(2, "0");
 
   const statusLabel = {
+    loading: "Loading voice system...",
     connecting: "Connecting...",
     "waiting-agent": "Coach is joining...",
     connected: "Live with your coach",
@@ -152,6 +168,7 @@ export function CallScreen({
   }[status];
 
   const statusColor = {
+    loading: "text-gray-400",
     connecting: "text-purple-300",
     "waiting-agent": "text-yellow-300",
     connected: "text-green-300",
@@ -194,10 +211,14 @@ export function CallScreen({
 
         {/* Status */}
         <div className="mt-4 flex items-center gap-2 text-sm">
-          {(status === "connecting" || status === "waiting-agent") ? (
+          {status === "loading" ||
+          status === "connecting" ||
+          status === "waiting-agent" ? (
             <Loader2 className={`h-4 w-4 animate-spin ${statusColor}`} />
           ) : status === "connected" ? (
-            <span className={`h-2 w-2 rounded-full bg-current animate-pulse ${statusColor}`} />
+            <span
+              className={`h-2 w-2 rounded-full bg-green-400 animate-pulse`}
+            />
           ) : null}
           <span className={statusColor}>{statusLabel}</span>
         </div>
@@ -211,7 +232,9 @@ export function CallScreen({
 
         {/* Error */}
         {error && (
-          <p className="mt-4 max-w-xs text-center text-sm text-red-400">{error}</p>
+          <p className="mt-4 max-w-xs text-center text-sm text-red-400">
+            {error}
+          </p>
         )}
 
         {/* Controls */}
@@ -225,10 +248,11 @@ export function CallScreen({
                   : "border-white/20 bg-white/10 hover:bg-white/20"
               }`}
             >
-              {muted
-                ? <MicOff className="h-6 w-6 text-red-400" />
-                : <Mic className="h-6 w-6 text-white" />
-              }
+              {muted ? (
+                <MicOff className="h-6 w-6 text-red-400" />
+              ) : (
+                <Mic className="h-6 w-6 text-white" />
+              )}
             </button>
           )}
 
@@ -245,7 +269,7 @@ export function CallScreen({
           {status === "connected"
             ? "Speak any time — even while coach is talking. They'll stop and listen."
             : status === "waiting-agent"
-            ? "Your coach is joining the room... say hello! 👋"
+            ? "Your coach is joining... say hello! 👋"
             : ""}
         </p>
       </div>
