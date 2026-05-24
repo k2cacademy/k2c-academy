@@ -1,88 +1,121 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { CheckCircle2, Download, Sparkles } from "lucide-react";
 
-export const Route = createFileRoute("/api/public/send-lead-magnet")({
-  server: {
-    handlers: {
-      POST: async ({ request }: { request: Request }) => {
-        try {
-          const { name, email } = await request.json();
+// TODO: Replace with the public URL of the uploaded PDF in the `lead-magnets` storage bucket.
+const LEAD_MAGNET_PDF_URL = "/lead-magnet.pdf";
 
-          if (!name || !email) {
-            return Response.json({ error: "Name and email required" }, { status: 400 });
-          }
-
-          const firstName = name.split(" ")[0];
-          const pdfUrl = "https://k2c-academy.lovable.app/5-things-you-already-know.pdf";
-
-          const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-            method: "POST",
-            headers: {
-              "api-key": `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`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              sender: {
-                name: "Digital Nathy",
-                email: "oniahemmanuel@gmail.com",
-              },
-              to: [{ email }],
-              subject: "Your free K2Ç guide is here — plus one thing to know 🎁",
-              htmlContent: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
-                  <h1 style="color: #FFD700; font-size: 22px; line-height: 1.4;">Your free K2Ç guide is here — plus one thing to know 🎁</h1>
-                  <p style="color: #cccccc; font-size: 16px; line-height: 1.6;">Hey ${firstName}!</p>
-                  <p style="color: #cccccc; font-size: 16px; line-height: 1.6;">
-                    Your free guide — <strong style="color: #ffffff;">5 Things You Already Know That Can Earn You Money Online</strong> — is ready. Read it today. Pick one skill. That is your starting point.
-                  </p>
-                  <div style="text-align: center; margin: 28px 0;">
-                    <a href="${pdfUrl}" style="background: #FFD700; color: #000000; padding: 16px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; display: inline-block;">
-                      📄 Download Your Free PDF
-                    </a>
-                  </div>
-                  <p style="color: #cccccc; font-size: 15px; text-align: center;">
-                    Prefer the raw PDF link? <a href="${pdfUrl}" style="color: #FFD700; text-decoration: underline;">Download it here.</a>
-                  </p>
-                  <hr style="border: none; border-top: 1px solid #333; margin: 28px 0;" />
-                  <p style="color: #cccccc; font-size: 16px; line-height: 1.6;">
-                    But here is what the guide cannot do: it cannot show you <strong style="color: #ffffff;">HOW</strong> to turn that skill into your first sale. That is exactly what the <strong style="color: #ffffff;">Zero to First Online Sale System</strong> does.
-                  </p>
-                  <p style="color: #cccccc; font-size: 16px; line-height: 1.6;">
-                    150+ Nigerian beginners have already used it to make their first legitimate online sale. Your turn starts here:
-                  </p>
-                  <div style="text-align: center; margin: 28px 0;">
-                    <a href="https://oniahemmanuel.systeme.io/da36229f" style="background: #FFD700; color: #000000; padding: 16px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; display: inline-block;">
-                      GET INSTANT ACCESS — ₦9,997 🚀
-                    </a>
-                  </div>
-                  <div style="background: #7C3AED; padding: 20px; border-radius: 8px; text-align: center; margin: 24px 0;">
-                    <p style="color: #ffffff; margin: 0 0 14px 0; font-size: 15px;">Join our WhatsApp Channel for free daily tips from Digital Nathy:</p>
-                    <a href="https://whatsapp.com/channel/0029VbBM3Ao9mrGjHvT3k72Y" style="background: #FFD700; color: #000000; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">
-                      Join WhatsApp Channel 📣
-                    </a>
-                  </div>
-                  <p style="color: #FFD700; font-size: 17px; font-weight: bold; margin-top: 28px;">Stop Learning. Start Earning.</p>
-                  <p style="color: #888888; font-size: 13px; margin-top: 8px;">— Digital Nathy, Nigeria's First Sale Coach 💜</p>
-                  <p style="color: #555555; font-size: 12px; font-style: italic; margin-top: 16px;">
-                    P.S. Every student who commits to the system makes their first sale. The only ones who don't are the ones who never start.
-                  </p>
-                </div>
-              `,
-            }),
-          });
-
-          if (!response.ok) {
-            const error = await response.text();
-            console.error("Brevo error:", error);
-            return Response.json({ error: "Failed to send email" }, { status: 500 });
-          }
-
-          return Response.json({ success: true });
-
-        } catch (error) {
-          console.error("Lead magnet error:", error);
-          return Response.json({ error: "Server error" }, { status: 500 });
-        }
-      },
-    },
-  },
+const schema = z.object({
+  name: z.string().trim().min(2, "Enter your name").max(80, "Name is too long"),
+  email: z.string().trim().email("Enter a valid email").max(255),
+  whatsapp: z
+    .string()
+    .trim()
+    .max(20, "WhatsApp number is too long")
+    .optional()
+    .or(z.literal("")),
 });
+
+export const LeadMagnet = () => {
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+  const navigate = useNavigate();
+
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const parsed = schema.safeParse({
+      name: String(fd.get("name") || ""),
+      email: String(fd.get("email") || ""),
+      whatsapp: String(fd.get("whatsapp") || ""),
+    });
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "Check your details.");
+      return;
+    }
+    setSubmitting(true);
+    const { error } = await supabase.from("leads").insert({
+      name: parsed.data.name,
+      email: parsed.data.email,
+      whatsapp: parsed.data.whatsapp || null,
+      source: "lead-magnet",
+    });
+    setSubmitting(false);
+    if (error) {
+      toast.error("Couldn't save your details. Try again.");
+      return;
+    }
+    // Track lead with Meta Pixel if available
+    // @ts-ignore
+    if (typeof window !== "undefined" && typeof window.fbq === "function") {
+      // @ts-ignore
+      window.fbq("track", "Lead", { content_name: "Free PDF Guide" });
+    }
+    setDone(true);
+    toast.success("Check your screen — your free guide is ready.");
+    // Open PDF in new tab
+    window.open(LEAD_MAGNET_PDF_URL, "_blank", "noopener");
+    // Redirect to thank-you page so they join the WhatsApp community
+    setTimeout(() => navigate("/thank-you?type=lead"), 600);
+  };
+
+  return (
+    <section id="free-guide" className="py-24 md:py-32">
+      <div className="container">
+        <div className="max-w-4xl mx-auto rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/10 via-background to-accent/10 p-8 md:p-14 card-glow">
+          <div className="grid md:grid-cols-2 gap-10 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/15 border border-primary/30 text-primary text-xs font-semibold mb-4">
+                <Sparkles className="w-3.5 h-3.5" /> FREE PDF GUIDE
+              </div>
+              <h2 className="text-3xl md:text-5xl font-bold mb-4">
+                5 things you already know that can <span className="gradient-text">earn you money online</span>
+              </h2>
+              <p className="text-muted-foreground text-lg">
+                A free, no-fluff PDF showing you the everyday skills you can monetize this week — straight from the K2Ç playbook.
+              </p>
+            </div>
+
+            {done ? (
+              <div className="text-center p-8 rounded-2xl bg-card border border-primary/40">
+                <CheckCircle2 className="w-12 h-12 text-primary mx-auto mb-3" />
+                <h3 className="text-xl font-semibold mb-2">You're in!</h3>
+                <p className="text-muted-foreground mb-5">If your download didn't start, click below.</p>
+                <Button asChild variant="hero" className="w-full">
+                  <a href={LEAD_MAGNET_PDF_URL} target="_blank" rel="noopener">
+                    <Download className="mr-1 w-4 h-4" /> Download PDF
+                  </a>
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={onSubmit} className="space-y-4 p-6 rounded-2xl bg-card border border-border">
+                <div>
+                  <Label htmlFor="lm-name">Your name</Label>
+                  <Input id="lm-name" name="name" required maxLength={80} className="mt-2 h-11" placeholder="Emmanuel" />
+                </div>
+                <div>
+                  <Label htmlFor="lm-email">Email</Label>
+                  <Input id="lm-email" name="email" type="email" required maxLength={255} className="mt-2 h-11" placeholder="you@email.com" />
+                </div>
+                <div>
+                  <Label htmlFor="lm-whatsapp">WhatsApp <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input id="lm-whatsapp" name="whatsapp" maxLength={20} className="mt-2 h-11" placeholder="08012345678" />
+                </div>
+                <Button type="submit" variant="hero" className="w-full" disabled={submitting}>
+                  {submitting ? "Sending..." : (<><Download className="mr-1 w-4 h-4" /> Send me the free PDF</>)}
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">No spam. Unsubscribe anytime.</p>
+              </form>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
