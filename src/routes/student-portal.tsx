@@ -24,10 +24,12 @@ const AMBASSADORS = [
 ];
 
 export const Route = createFileRoute("/student-portal")({
-  meta: () => ([
-    { title: "Student Portal — K2Ç Academy" },
-    { name: "robots", content: "noindex, nofollow" },
-  ]),
+  head: () => ({
+    meta: [
+      { title: "Student Portal — K2Ç Academy" },
+      { name: "robots", content: "noindex, nofollow" },
+    ],
+  }),
   component: StudentPortalPage,
 });
 

@@ -97,8 +97,8 @@ export const Route = createFileRoute("/api/public/monnify-webhook")({
         }
 
         // Check idempotency
-        const { data: existing } = await supabaseAdmin
-          .from("payment_verifications")
+        const { data: existing } = await (supabaseAdmin
+          .from("payment_verifications") as any)
           .select("id, status")
           .eq("payment_reference", ref)
           .maybeSingle();
@@ -108,7 +108,7 @@ export const Route = createFileRoute("/api/public/monnify-webhook")({
         }
 
         // Log payment
-        await supabaseAdmin.from("payment_verifications").upsert({
+        await (supabaseAdmin.from("payment_verifications") as any).upsert({
           payment_reference: ref,
           email,
           full_name: name,
@@ -148,7 +148,7 @@ export const Route = createFileRoute("/api/public/monnify-webhook")({
               })
               .eq("email", email);
           } else {
-            await supabaseAdmin.from("student_profiles").insert({
+            await (supabaseAdmin.from("student_profiles") as any).insert({
               email,
               full_name: name,
               first_name: firstName,
@@ -198,8 +198,8 @@ export const Route = createFileRoute("/api/public/monnify-webhook")({
           const now = new Date();
           const circleEnd = new Date(now.getTime() + 30 * 86400000).toISOString().slice(0, 10);
 
-          await supabaseAdmin
-            .from("student_profiles")
+          await (supabaseAdmin
+            .from("student_profiles") as any)
             .update({
               inner_circle_status: "active",
               inner_circle_start: now.toISOString().slice(0, 10),
