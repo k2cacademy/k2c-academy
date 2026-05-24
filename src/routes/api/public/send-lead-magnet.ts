@@ -14,17 +14,20 @@ export const Route = createFileRoute("/api/public/send-lead-magnet")({
           const firstName = name.split(" ")[0];
           const pdfUrl = "https://k2c-academy.lovable.app/5-things-you-already-know.pdf";
 
-          const response = await fetch("https://api.resend.com/emails", {
+          const response = await fetch("https://api.brevo.com/v3/smtp/email", {
             method: "POST",
             headers: {
-              "Authorization": `Bearer re_cULx4BLu_LwMSWXukgGKy8nTzs4RrgEjX`,
+              "api-key": `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`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              from: "Digital Nathy <onboarding@resend.dev>",
-              to: [email],
+              sender: {
+                name: "Digital Nathy",
+                email: "k2cacademy001@gmail.com",
+              },
+              to: [{ email }],
               subject: "Your free K2Ç guide is here — plus one thing to know 🎁",
-              html: `
+              htmlContent: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
                   <h1 style="color: #FFD700; font-size: 22px; line-height: 1.4;">Your free K2Ç guide is here — plus one thing to know 🎁</h1>
                   <p style="color: #cccccc; font-size: 16px; line-height: 1.6;">Hey ${firstName}!</p>
@@ -69,7 +72,7 @@ export const Route = createFileRoute("/api/public/send-lead-magnet")({
 
           if (!response.ok) {
             const error = await response.text();
-            console.error("Resend error:", error);
+            console.error("Brevo error:", error);
             return Response.json({ error: "Failed to send email" }, { status: 500 });
           }
 
