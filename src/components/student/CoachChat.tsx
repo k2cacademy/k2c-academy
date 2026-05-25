@@ -445,6 +445,10 @@ export function CoachChat({ session, profile }: { session: string; profile: Prof
         />
       )}
 
+      {bookEditorOpen && (
+        <BookEditorSheet session={session} onClose={() => setBookEditorOpen(false)} />
+      )}
+
       <RechargeModal
         session={session}
         open={rechargeOpen}
