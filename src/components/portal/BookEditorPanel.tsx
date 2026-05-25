@@ -35,6 +35,7 @@ export function BookEditorPanel() {
     const name = file.name.toLowerCase();
     try {
       if (name.endsWith(".docx")) {
+        // @ts-expect-error - no types for browser build
         const mammoth = await import("mammoth/mammoth.browser.js");
         const arrayBuffer = await file.arrayBuffer();
         const res = await (mammoth as { extractRawText: (o: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string }> }).extractRawText({ arrayBuffer });
