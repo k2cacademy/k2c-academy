@@ -429,22 +429,22 @@ export function CoachChat({ session, profile }: { session: string; profile: Prof
       {/* Call screen */}
       {callOpen && (
         <CallScreen
-          session={session}
-          firstName={firstName}
-          onClose={() => {
-            setCallOpen(false);
-            void minutesFn({ data: { session } }).then((m) =>
-              setMinutes({ free_remaining: m.free_remaining, purchased: m.purchased }),
-            );
-          }}
-          onNoMinutes={() => {
-            setCallOpen(false);
-            setRechargeReason("session-end");
-            setRechargeOpen(true);
-          }}
-        />
-      )}
-
+  session={session}
+  firstName={firstName}
+  onClose={() => {
+    setCallOpen(false);
+    void minutesFn({ data: { session } }).then((m) =>
+      setMinutes({ free_remaining: m.free_remaining, purchased: m.purchased })
+    );
+  }}
+  onNoMinutes={() => {
+    setCallOpen(false);
+    setRechargeReason("session-end");
+    setRechargeOpen(true);
+  }}
+  isInnerCircle={isInnerCircle}
+  purchasedMinutes={minutes?.purchased ?? 0}
+/>
       {bookEditorOpen && (
         <BookEditorSheet session={session} onClose={() => setBookEditorOpen(false)} />
       )}
