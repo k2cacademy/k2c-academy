@@ -321,6 +321,9 @@ export function CoachChat({ session, profile }: { session: string; profile: Prof
           <ActionPill onClick={innerCircleWA} variant="gold">
             <Crown className="inline h-4 w-4 mr-1" /> Inner Circle
           </ActionPill>
+          <ActionPill onClick={() => setBookEditorOpen(true)} variant="gold">
+            <BookOpen className="inline h-4 w-4 mr-1" /> AI Book Editor
+          </ActionPill>
         </div>
       </div>
 
