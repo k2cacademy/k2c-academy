@@ -33,6 +33,8 @@ export function CallScreen({
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const [timeWarning, setTimeWarning] = useState(false);
   const [previousContext, setPreviousContext] = useState<string | null>(null);
+  const [timeWarning, setTimeWarning] = useState(false);
+const [previousContext, setPreviousContext] = useState<string | null>(null);
 
   const vapiRef = useRef<Vapi | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
