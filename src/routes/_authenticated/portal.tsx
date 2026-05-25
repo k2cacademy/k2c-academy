@@ -167,6 +167,8 @@ function PortalPage() {
               </div>
             )}
           </div>
+
+          <BookEditorPanel />
         </div>
       </main>
 
