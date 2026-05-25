@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { sendCoachMessage, getChatHistory, getMinutesState } from "@/lib/student-portal.functions";
-import { Send, Phone, X, Crown, Sparkles, AlertTriangle, MessageSquare } from "lucide-react";
+import { Send, Phone, X, Crown, Sparkles, AlertTriangle, MessageSquare, BookOpen } from "lucide-react";
 import { SpeakerButton } from "./SpeakerButton";
 import { VoiceInput } from "./VoiceInput";
 import { CallScreen } from "./CallScreen";
 import { RechargeModal } from "./RechargeModal";
+import { BookEditorSheet } from "./BookEditorSheet";
 
 const DAILY_TIPS = [
   "Follow up with every prospect. The money is in the follow up!",
@@ -39,6 +40,7 @@ export function CoachChat({ session, profile }: { session: string; profile: Prof
   const [actionText, setActionText] = useState("");
   const [actionText2, setActionText2] = useState("");
   const [callOpen, setCallOpen] = useState(false);
+  const [bookEditorOpen, setBookEditorOpen] = useState(false);
   const [rechargeOpen, setRechargeOpen] = useState(false);
   const [rechargeReason, setRechargeReason] = useState<"no-minutes" | "session-end">("no-minutes");
   const [minutes, setMinutes] = useState<{ free_remaining: number; purchased: number } | null>(null);
@@ -319,6 +321,9 @@ export function CoachChat({ session, profile }: { session: string; profile: Prof
           <ActionPill onClick={innerCircleWA} variant="gold">
             <Crown className="inline h-4 w-4 mr-1" /> Inner Circle
           </ActionPill>
+          <ActionPill onClick={() => setBookEditorOpen(true)} variant="gold">
+            <BookOpen className="inline h-4 w-4 mr-1" /> AI Book Editor
+          </ActionPill>
         </div>
       </div>
 
@@ -438,6 +443,10 @@ export function CoachChat({ session, profile }: { session: string; profile: Prof
             setRechargeOpen(true);
           }}
         />
+      )}
+
+      {bookEditorOpen && (
+        <BookEditorSheet session={session} onClose={() => setBookEditorOpen(false)} />
       )}
 
       <RechargeModal
