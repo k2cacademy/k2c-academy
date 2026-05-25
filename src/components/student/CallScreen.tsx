@@ -5,9 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 const VAPI_PUBLIC_KEY = "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1";
 const VAPI_ASSISTANT_ID = "a16cf991-f420-44f4-8460-0129939c9fe3";
-
-const FREE_TRIAL_SECONDS = 3 * 60;   // 3 mins for trial
-const INNER_CIRCLE_SECONDS = 10 * 60; // 10 mins for Inner Circle
+const FREE_TRIAL_SECONDS = 3 * 60;
+const INNER_CIRCLE_SECONDS = 10 * 60;
 
 type CallStatus = "connecting" | "waiting-agent" | "connected" | "ending";
 
@@ -33,22 +32,88 @@ export function CallScreen({
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const [timeWarning, setTimeWarning] = useState(false);
   const [previousContext, setPreviousContext] = useState<string | null>(null);
-  const [timeWarning, setTimeWarning] = useState(false);
-const [previousContext, setPreviousContext] = useState<string | null>(null);
+  const [vapiSessionId, setVapiSessionId] = useState<string | null>(null);
+  const [isReturning, setIsReturning] = useState(false);
 
   const vapiRef = useRef<Vapi | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const endingRef = useRef(false);
   const startedTimerRef = useRef(false);
   const messagesRef = useRef<string[]>([]);
+  const ringAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Calculate max seconds based on plan + top up
   const baseSeconds = isInnerCircle ? INNER_CIRCLE_SECONDS : FREE_TRIAL_SECONDS;
   const topUpSeconds = purchasedMinutes * 60;
   const MAX_SECONDS = baseSeconds + topUpSeconds;
 
+  // Start ringing immediately when component mounts
+  useEffect(() => {
+    const ring = new Audio(
+      "https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3"
+    );
+    ring.loop = true;
+    ring.volume = 0.6;
+    ring.play().catch(() => {});
+    ringAudioRef.current = ring;
+
+    return () => {
+      ring.pause();
+      ring.currentTime = 0;
+    };
+  }, []);
+
+  const stopRinging = () => {
+    if (ringAudioRef.current) {
+      ringAudioRef.current.pause();
+      ringAudioRef.current.currentTime = 0;
+    }
+  };
+
   // Load previous conversation memory
-  
+  useEffect(() => {
+    const loadContext = async () => {
+      try {
+        const { data } = await supabase
+          .from("voice_call_memory")
+          .select("summary, last_topic, progress")
+          .eq("session", session)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (data) {
+          setPreviousContext(
+            `Previous session summary: ${data.summary}. Last topic: ${data.last_topic}. Progress: ${data.progress}`
+          );
+        } else {
+          setPreviousContext("");
+        }
+      } catch {
+        setPreviousContext("");
+      }
+    };
+    loadContext();
+  }, [session]);
+
+  // Get Vapi session ID
+  useEffect(() => {
+    const getVapiSession = async () => {
+      try {
+        const res = await fetch("/api/public/hooks/vapi-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session }),
+        });
+        const data = await res.json();
+        setVapiSessionId(data.vapiSessionId);
+        setIsReturning(data.isReturning);
+      } catch {
+        setVapiSessionId(null);
+      }
+    };
+    getVapiSession();
+  }, [session]);
+
   // Start call once context is loaded
   useEffect(() => {
     if (previousContext === null) return;
@@ -59,23 +124,8 @@ const [previousContext, setPreviousContext] = useState<string | null>(null);
 
     vapi.on("call-start", () => {
       if (cancelled) return;
-      setStauseEffect(() => {
-  const getVapiSession = async () => {
-    try {
-      const res = await fetch("/api/public/hooks/vapi-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session }),
-      });
-      const data = await res.json();
-      setVapiSessionId(data.vapiSessionId);
-      setIsReturning(data.isReturning);
-    } catch {
-      setVapiSessionId(null);
-    }
-  };
-  getVapiSession();
-}, [session]);tus("waiting-agent");
+      stopRinging(); // 🔔 Stop ringing when call connects
+      setStatus("waiting-agent");
     });
 
     vapi.on("speech-start", () => {
@@ -111,12 +161,14 @@ const [previousContext, setPreviousContext] = useState<string | null>(null);
     });
 
     vapi.on("call-end", () => {
+      stopRinging();
       saveMemory();
       cleanup();
       onClose();
     });
 
     vapi.on("error", (e: unknown) => {
+      stopRinging();
       const msg = (e as { message?: string })?.message ?? "Call error. Please try again.";
       if (!cancelled) {
         setError(msg);
@@ -133,17 +185,29 @@ const [previousContext, setPreviousContext] = useState<string | null>(null);
         const planLabel = isInnerCircle ? "Inner Circle member" : "trial student";
 
         await vapi.start(VAPI_ASSISTANT_ID, {
-  sessionId: vapiSessionId || undefined,
-  variableValues: {
-    firstName,
-    name: firstName,
-    is_returning: isReturning ? "yes" : "no",
-    plan: isInnerCircle ? "Inner Circle member" : "trial student",
-  },
-});
+          sessionId: vapiSessionId || undefined,
+          variableValues: {
+            firstName,
+            name: firstName,
+            student_name: firstName,
+            memory_context: memoryContext,
+            is_returning: isReturning ? "yes" : "no",
+            plan: planLabel,
+            minutes_available: String(Math.floor(MAX_SECONDS / 60)),
+          },
+        });
+      } catch (e) {
+        stopRinging();
+        if (!cancelled) {
+          setError((e as Error)?.message ?? "Could not start call.");
+          setStatus("ending");
+        }
+      }
+    })();
 
     return () => {
       cancelled = true;
+      stopRinging();
       cleanup();
     };
   }, [previousContext]);
@@ -198,6 +262,7 @@ const [previousContext, setPreviousContext] = useState<string | null>(null);
   const cleanup = () => {
     if (endingRef.current) return;
     endingRef.current = true;
+    stopRinging();
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
     try { vapiRef.current?.stop(); } catch { /* noop */ }
@@ -206,6 +271,7 @@ const [previousContext, setPreviousContext] = useState<string | null>(null);
 
   const hangup = (timeUp = false) => {
     setStatus("ending");
+    stopRinging();
     saveMemory();
     cleanup();
     onClose();
@@ -229,7 +295,7 @@ const [previousContext, setPreviousContext] = useState<string | null>(null);
     : `Free Trial — ${Math.floor(FREE_TRIAL_SECONDS / 60)} mins/day`;
 
   const statusLabel = {
-    connecting: "Connecting...",
+    connecting: "Calling your coach... 📞",
     "waiting-agent": "Coach is joining...",
     connected: "Live with your coach",
     ending: "Ending...",
@@ -256,16 +322,23 @@ const [previousContext, setPreviousContext] = useState<string | null>(null);
         {/* Avatar */}
         <div
           className={`h-40 w-40 rounded-full flex items-center justify-center text-white text-3xl font-bold mb-6 transition-all duration-300 ${
-            agentSpeaking ? "animate-pulse scale-110" : ""
+            status === "connecting"
+              ? "animate-pulse"
+              : agentSpeaking
+              ? "animate-pulse scale-110"
+              : ""
           }`}
           style={{
             background: "linear-gradient(135deg, #5B21B6, #9333EA)",
-            boxShadow: agentSpeaking
-              ? "0 0 60px rgba(147,51,234,0.8)"
-              : "0 0 40px rgba(147,51,234,0.4)",
+            boxShadow:
+              status === "connecting"
+                ? "0 0 40px rgba(147,51,234,0.6)"
+                : agentSpeaking
+                ? "0 0 60px rgba(147,51,234,0.8)"
+                : "0 0 40px rgba(147,51,234,0.4)",
           }}
         >
-          AI
+          {status === "connecting" ? "📞" : "AI"}
         </div>
 
         <h2 className="text-2xl font-bold text-white mb-1">
@@ -315,7 +388,6 @@ const [previousContext, setPreviousContext] = useState<string | null>(null);
           </p>
         )}
 
-        {/* Top up notice */}
         {purchasedMinutes > 0 && (
           <p className="mt-1 text-xs text-blue-400 text-center">
             +{purchasedMinutes} purchased mins included
@@ -355,7 +427,9 @@ const [previousContext, setPreviousContext] = useState<string | null>(null);
         </div>
 
         <p className="mt-6 text-xs text-white/40 text-center max-w-xs">
-          {status === "connected"
+          {status === "connecting"
+            ? "Ringing your AI coach... 🔔"
+            : status === "connected"
             ? "Speak any time — even while coach is talking. They'll stop and listen."
             : status === "waiting-agent"
             ? "Your coach is joining... say hello! 👋"
