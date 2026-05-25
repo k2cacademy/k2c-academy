@@ -131,22 +131,14 @@ export function CallScreen({
         const planLabel = isInnerCircle ? "Inner Circle member" : "trial student";
 
         await vapi.start(VAPI_ASSISTANT_ID, {
-          variableValues: {
-            firstName,
-            name: firstName,
-            student_name: firstName,
-            memory_context: memoryContext,
-            plan: planLabel,
-            minutes_available: String(Math.floor(MAX_SECONDS / 60)),
-          },
-        });
-      } catch (e) {
-        if (!cancelled) {
-          setError((e as Error)?.message ?? "Could not start call.");
-          setStatus("ending");
-        }
-      }
-    })();
+  sessionId: vapiSessionId || undefined,
+  variableValues: {
+    firstName,
+    name: firstName,
+    is_returning: isReturning ? "yes" : "no",
+    plan: isInnerCircle ? "Inner Circle member" : "trial student",
+  },
+});
 
     return () => {
       cancelled = true;
