@@ -187,15 +187,16 @@ export function CallScreen({
         await vapi.start(VAPI_ASSISTANT_ID, {
           sessionId: vapiSessionId || undefined,
           variableValues: {
-            firstName,
-            name: firstName,
-            student_name: firstName,
-            memory_context: memoryContext,
-            is_returning: isReturning ? "yes" : "no",
-            plan: planLabel,
-            minutes_available: String(Math.floor(MAX_SECONDS / 60)),
-          },
-        });
+  studentKey: session, // ✅ required for cross-call memory now
+
+  firstName,
+  name: firstName,
+  student_name: firstName,
+  memory_context: memoryContext,
+  is_returning: isReturning ? "yes" : "no",
+  plan: planLabel,
+  minutes_available: String(Math.floor(MAX_SECONDS / 60)),
+},
       } catch (e) {
         stopRinging();
         if (!cancelled) {
