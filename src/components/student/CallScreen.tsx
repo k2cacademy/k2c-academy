@@ -46,31 +46,7 @@ export function CallScreen({
   const MAX_SECONDS = baseSeconds + topUpSeconds;
 
   // Load previous conversation memory
-  useEffect(() => {
-    const loadContext = async () => {
-      try {
-        const { data } = await supabase
-          .from("voice_call_memory")
-          .select("summary, last_topic, progress")
-          .eq("session", session)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (data) {
-          setPreviousContext(
-            `Previous session summary: ${data.summary}. Last topic: ${data.last_topic}. Progress: ${data.progress}`
-          );
-        } else {
-          setPreviousContext("");
-        }
-      } catch {
-        setPreviousContext("");
-      }
-    };
-    loadContext();
-  }, [session]);
-
+  
   // Start call once context is loaded
   useEffect(() => {
     if (previousContext === null) return;
@@ -81,7 +57,23 @@ export function CallScreen({
 
     vapi.on("call-start", () => {
       if (cancelled) return;
-      setStatus("waiting-agent");
+      setStauseEffect(() => {
+  const getVapiSession = async () => {
+    try {
+      const res = await fetch("/api/public/hooks/vapi-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session }),
+      });
+      const data = await res.json();
+      setVapiSessionId(data.vapiSessionId);
+      setIsReturning(data.isReturning);
+    } catch {
+      setVapiSessionId(null);
+    }
+  };
+  getVapiSession();
+}, [session]);tus("waiting-agent");
     });
 
     vapi.on("speech-start", () => {
