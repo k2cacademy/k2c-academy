@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { sendCoachMessage, getChatHistory, getMinutesState } from "@/lib/student-portal.functions";
-import { Send, Phone, X, Crown, Sparkles, AlertTriangle, MessageSquare } from "lucide-react";
+import { Send, Phone, X, Crown, Sparkles, AlertTriangle, MessageSquare, BookOpen } from "lucide-react";
 import { SpeakerButton } from "./SpeakerButton";
 import { VoiceInput } from "./VoiceInput";
 import { CallScreen } from "./CallScreen";
 import { RechargeModal } from "./RechargeModal";
+import { BookEditorSheet } from "./BookEditorSheet";
 
 const DAILY_TIPS = [
   "Follow up with every prospect. The money is in the follow up!",
