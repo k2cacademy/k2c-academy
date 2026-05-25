@@ -29,7 +29,7 @@ const RINGTONES = [
   "/From Knowledge to Cash (1).mp3",
 ];
 
-const FREE_TRIAL_SECONDS = 10 * 60; // 10 mins per month
+const FREE_TRIAL_SECONDS = 10 * 60;
 const INNER_CIRCLE_SECONDS = 10 * 60;
 
 type CallStatus = "connecting" | "waiting-agent" | "connected" | "ending";
@@ -70,11 +70,17 @@ export function CallScreen({
   const ringtoneIndexRef = useRef(0);
   const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const usageRef = useRef<{ id: string; free_seconds_used: number } | null>(null);
+  const durationRef = useRef(0);
 
   const baseSeconds = isInnerCircle ? INNER_CIRCLE_SECONDS : FREE_TRIAL_SECONDS;
   const topUpSeconds = purchasedMinutes * 60;
 
-  // ── Check & reset monthly usage ──────────────────────────────────────────────
+  // ── Keep durationRef in sync ──────────────────────────────────────────────
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
+
+  // ── Check & reset monthly usage ───────────────────────────────────────────
   const checkUsage = async (): Promise<number> => {
     try {
       const { data, error } = await supabase
@@ -88,7 +94,6 @@ export function CallScreen({
       const now = new Date();
 
       if (!data) {
-        // First time user — create record
         const { data: newData } = await supabase
           .from("user_usage")
           .insert({ session, free_seconds_used: 0, plan: "free" })
@@ -98,14 +103,12 @@ export function CallScreen({
         return 0;
       }
 
-      // Check if we need to reset (new month)
       const lastReset = new Date(data.last_reset);
       const isNewMonth =
         now.getMonth() !== lastReset.getMonth() ||
         now.getFullYear() !== lastReset.getFullYear();
 
       if (isNewMonth) {
-        // Reset usage for new month
         await supabase
           .from("user_usage")
           .update({ free_seconds_used: 0, last_reset: now.toISOString() })
@@ -122,7 +125,7 @@ export function CallScreen({
     }
   };
 
-  // ── Save seconds used after call ─────────────────────────────────────────────
+  // ── Save seconds used after call ──────────────────────────────────────────
   const saveUsage = async (secondsUsed: number) => {
     if (!usageRef.current || isInnerCircle) return;
     try {
@@ -136,7 +139,7 @@ export function CallScreen({
     }
   };
 
-  // ── Ringtone: alternate between tracks ───────────────────────────────────────
+  // ── Ringtone: alternate between tracks ────────────────────────────────────
   useEffect(() => {
     const playNext = () => {
       if (ringAudioRef.current) {
@@ -171,7 +174,7 @@ export function CallScreen({
     }
   };
 
-  // ── Load previous conversation memory ────────────────────────────────────────
+  // ── Load previous conversation memory ─────────────────────────────────────
   useEffect(() => {
     const loadContext = async () => {
       try {
@@ -197,7 +200,7 @@ export function CallScreen({
     loadContext();
   }, [session]);
 
-  // ── Get Vapi session ID ───────────────────────────────────────────────────────
+  // ── Get Vapi session ID ───────────────────────────────────────────────────
   useEffect(() => {
     const getVapiSession = async () => {
       try {
@@ -216,14 +219,13 @@ export function CallScreen({
     getVapiSession();
   }, [session]);
 
-  // ── Start call with usage check + fallback logic ──────────────────────────────
+  // ── Start call with usage check + fallback logic ──────────────────────────
   useEffect(() => {
     if (previousContext === null) return;
     let cancelled = false;
     let assistantIndex = 0;
 
     const startCall = async () => {
-      // Check monthly usage for free users
       if (!isInnerCircle) {
         const secondsUsed = await checkUsage();
         setFreeSecondsUsed(secondsUsed);
@@ -238,6 +240,8 @@ export function CallScreen({
       }
 
       const tryNextAssistant = async () => {
+        if (cancelled) return;
+
         if (assistantIndex >= ASSISTANTS.length) {
           stopRinging();
           setError("Failed to connect. Please try again later.");
@@ -248,6 +252,9 @@ export function CallScreen({
         const { publicKey, assistantId } = ASSISTANTS[assistantIndex];
         assistantIndex++;
 
+        // ── KEY FIX: track if this attempt failed ────────────────────────
+        let callFailed = false;
+
         try {
           if (vapiRef.current) {
             try { vapiRef.current.stop(); } catch { /* noop */ }
@@ -256,6 +263,23 @@ export function CallScreen({
 
           const vapi = new Vapi(publicKey);
           vapiRef.current = vapi;
+
+          // ── ERROR: mark failed and try next immediately ───────────────
+          vapi.on("error", () => {
+            if (cancelled) return;
+            callFailed = true;
+            tryNextAssistant(); // 👈 switch to next assistant
+          });
+
+          // ── CALL END: only close if NOT a failed fallback ─────────────
+          vapi.on("call-end", () => {
+            if (callFailed) return; // 👈 ignore if we're switching
+            stopRinging();
+            saveUsage(durationRef.current);
+            saveMemory();
+            cleanup();
+            onClose();
+          });
 
           vapi.on("call-start", () => {
             if (cancelled) return;
@@ -299,18 +323,6 @@ export function CallScreen({
             }
           });
 
-          vapi.on("call-end", () => {
-            stopRinging();
-            saveUsage(duration);
-            saveMemory();
-            cleanup();
-            onClose();
-          });
-
-          vapi.on("error", () => {
-            tryNextAssistant();
-          });
-
           const memoryContext = previousContext
             ? `IMPORTANT: This student has spoken with you before. ${previousContext}. Continue from where you left off. Don't restart from scratch.`
             : `This is ${firstName}'s first session. Welcome them warmly and ask what skill they want to monetize.`;
@@ -335,8 +347,10 @@ export function CallScreen({
               ),
             },
           });
+
         } catch {
-          tryNextAssistant();
+          // vapi.start() itself threw — try next
+          if (!cancelled) tryNextAssistant();
         }
       };
 
@@ -411,7 +425,7 @@ export function CallScreen({
   const hangup = (timeUp = false) => {
     setStatus("ending");
     stopRinging();
-    saveUsage(duration);
+    saveUsage(durationRef.current);
     saveMemory();
     cleanup();
     onClose();
@@ -451,7 +465,7 @@ export function CallScreen({
     ending: "text-gray-400",
   }[status];
 
-  // ── Blocked screen (no minutes left) ─────────────────────────────────────────
+  // ── Blocked screen ────────────────────────────────────────────────────────
   if (blockedNoMinutes) {
     return (
       <div className="fixed inset-0 z-50 bg-[#050505] flex flex-col items-center justify-center px-6">
@@ -532,7 +546,6 @@ export function CallScreen({
           Hi {firstName}, glad you called. 👋
         </p>
 
-        {/* Plan badge */}
         <span
           className={`mt-2 px-3 py-1 rounded-full text-xs font-semibold ${
             isInnerCircle
@@ -549,7 +562,6 @@ export function CallScreen({
           </div>
         )}
 
-        {/* Status */}
         <div className="mt-4 flex items-center gap-2 text-sm">
           {status === "connecting" || status === "waiting-agent" ? (
             <Loader2 className={`h-4 w-4 animate-spin ${statusColor}`} />
@@ -559,7 +571,6 @@ export function CallScreen({
           <span className={statusColor}>{statusLabel}</span>
         </div>
 
-        {/* Countdown */}
         {status === "connected" && (
           <div
             className={`mt-6 text-6xl font-mono tabular-nums font-bold ${
@@ -588,7 +599,6 @@ export function CallScreen({
           </div>
         )}
 
-        {/* Controls */}
         <div className="mt-8 flex items-center gap-6">
           {status === "connected" && (
             <button
