@@ -6,13 +6,6 @@ import { CodeGate } from "@/components/student/CodeGate";
 import { Onboarding } from "@/components/student/Onboarding";
 import { CoachChat } from "@/components/student/CoachChat";
 import { Users, Phone, Award, Gift, Settings, BarChart3, LogOut, Shield } from "lucide-react";
-// Load Vapi SDK for voice calls
-if (typeof window !== "undefined") {
-  const script = document.createElement("script");
-  script.src = "https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/vapi.js";
-  script.async = true;
-  document.head.appendChild(script);
-}
 
 const SESSION_KEY = "k2c_student_session";
 const VERIFIED_KEY = "k2c_student_verified";
