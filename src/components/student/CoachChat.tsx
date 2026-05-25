@@ -40,6 +40,7 @@ export function CoachChat({ session, profile }: { session: string; profile: Prof
   const [actionText, setActionText] = useState("");
   const [actionText2, setActionText2] = useState("");
   const [callOpen, setCallOpen] = useState(false);
+  const [bookEditorOpen, setBookEditorOpen] = useState(false);
   const [rechargeOpen, setRechargeOpen] = useState(false);
   const [rechargeReason, setRechargeReason] = useState<"no-minutes" | "session-end">("no-minutes");
   const [minutes, setMinutes] = useState<{ free_remaining: number; purchased: number } | null>(null);
