@@ -3,9 +3,33 @@ import { PhoneOff, Mic, MicOff, Loader2 } from "lucide-react";
 import Vapi from "@vapi-ai/web";
 import { supabase } from "@/integrations/supabase/client";
 
-const VAPI_PUBLIC_KEY = "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1";
-const VAPI_ASSISTANT_ID = "a16cf991-f420-44f4-8460-0129939c9fe3";
-const FREE_TRIAL_SECONDS = 3 * 60;
+// ── Assistants (Main + 3 fallbacks) ──────────────────────────────────────────
+const ASSISTANTS = [
+  {
+    publicKey: "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1",
+    assistantId: "a16cf991-f420-44f4-8460-0129939c9fe3",
+  },
+  {
+    publicKey: "e6bf041d-1c62-4b94-a93c-52b563eef22c",
+    assistantId: "5c3ce312-2f00-486c-8cd9-7da43417af4d",
+  },
+  {
+    publicKey: "2ef0603f-4704-4cf4-9be8-a581fc68b192",
+    assistantId: "d1fd7394-f3bc-4a1d-8181-a05a4978c572",
+  },
+  {
+    publicKey: "04b01653-b99c-4749-b012-be91aa031768",
+    assistantId: "e4d008ae-429f-4248-a503-33f30917b28e",
+  },
+];
+
+// ── Ringtones ─────────────────────────────────────────────────────────────────
+const RINGTONES = [
+  "/From Knowledge to Cash.mp3",
+  "/From Knowledge to Cash (1).mp3",
+];
+
+const FREE_TRIAL_SECONDS = 10 * 60; // 10 mins per month
 const INNER_CIRCLE_SECONDS = 10 * 60;
 
 type CallStatus = "connecting" | "waiting-agent" | "connected" | "ending";
@@ -34,6 +58,8 @@ export function CallScreen({
   const [previousContext, setPreviousContext] = useState<string | null>(null);
   const [vapiSessionId, setVapiSessionId] = useState<string | null>(null);
   const [isReturning, setIsReturning] = useState(false);
+  const [blockedNoMinutes, setBlockedNoMinutes] = useState(false);
+  const [freeSecondsUsed, setFreeSecondsUsed] = useState(0);
 
   const vapiRef = useRef<Vapi | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -41,35 +67,111 @@ export function CallScreen({
   const startedTimerRef = useRef(false);
   const messagesRef = useRef<string[]>([]);
   const ringAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ringtoneIndexRef = useRef(0);
+  const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const usageRef = useRef<{ id: string; free_seconds_used: number } | null>(null);
 
   const baseSeconds = isInnerCircle ? INNER_CIRCLE_SECONDS : FREE_TRIAL_SECONDS;
   const topUpSeconds = purchasedMinutes * 60;
-  const MAX_SECONDS = baseSeconds + topUpSeconds;
 
-  // Start ringing immediately when component mounts
+  // ── Check & reset monthly usage ──────────────────────────────────────────────
+  const checkUsage = async (): Promise<number> => {
+    try {
+      const { data, error } = await supabase
+        .from("user_usage")
+        .select("id, free_seconds_used, last_reset, plan")
+        .eq("session", session)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const now = new Date();
+
+      if (!data) {
+        // First time user — create record
+        const { data: newData } = await supabase
+          .from("user_usage")
+          .insert({ session, free_seconds_used: 0, plan: "free" })
+          .select()
+          .single();
+        usageRef.current = { id: newData.id, free_seconds_used: 0 };
+        return 0;
+      }
+
+      // Check if we need to reset (new month)
+      const lastReset = new Date(data.last_reset);
+      const isNewMonth =
+        now.getMonth() !== lastReset.getMonth() ||
+        now.getFullYear() !== lastReset.getFullYear();
+
+      if (isNewMonth) {
+        // Reset usage for new month
+        await supabase
+          .from("user_usage")
+          .update({ free_seconds_used: 0, last_reset: now.toISOString() })
+          .eq("id", data.id);
+        usageRef.current = { id: data.id, free_seconds_used: 0 };
+        return 0;
+      }
+
+      usageRef.current = { id: data.id, free_seconds_used: data.free_seconds_used };
+      return data.free_seconds_used;
+    } catch (e) {
+      console.error("Usage check failed:", e);
+      return 0;
+    }
+  };
+
+  // ── Save seconds used after call ─────────────────────────────────────────────
+  const saveUsage = async (secondsUsed: number) => {
+    if (!usageRef.current || isInnerCircle) return;
+    try {
+      const newTotal = usageRef.current.free_seconds_used + secondsUsed;
+      await supabase
+        .from("user_usage")
+        .update({ free_seconds_used: newTotal })
+        .eq("id", usageRef.current.id);
+    } catch (e) {
+      console.error("Failed to save usage:", e);
+    }
+  };
+
+  // ── Ringtone: alternate between tracks ───────────────────────────────────────
   useEffect(() => {
-    const ring = new Audio(
-      "https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3"
-    );
-    ring.loop = true;
-    ring.volume = 0.6;
-    ring.play().catch(() => {});
-    ringAudioRef.current = ring;
+    const playNext = () => {
+      if (ringAudioRef.current) {
+        ringAudioRef.current.pause();
+        ringAudioRef.current.currentTime = 0;
+      }
+      const src = RINGTONES[ringtoneIndexRef.current % RINGTONES.length];
+      ringtoneIndexRef.current += 1;
+      const audio = new Audio(src);
+      audio.volume = 0.6;
+      ringAudioRef.current = audio;
+      audio.play().catch(() => {});
+    };
+
+    playNext();
+    ringIntervalRef.current = setInterval(playNext, 15000);
 
     return () => {
-      ring.pause();
-      ring.currentTime = 0;
+      if (ringIntervalRef.current) clearInterval(ringIntervalRef.current);
+      if (ringAudioRef.current) {
+        ringAudioRef.current.pause();
+        ringAudioRef.current.currentTime = 0;
+      }
     };
   }, []);
 
   const stopRinging = () => {
+    if (ringIntervalRef.current) clearInterval(ringIntervalRef.current);
     if (ringAudioRef.current) {
       ringAudioRef.current.pause();
       ringAudioRef.current.currentTime = 0;
     }
   };
 
-  // Load previous conversation memory
+  // ── Load previous conversation memory ────────────────────────────────────────
   useEffect(() => {
     const loadContext = async () => {
       try {
@@ -95,7 +197,7 @@ export function CallScreen({
     loadContext();
   }, [session]);
 
-  // Get Vapi session ID
+  // ── Get Vapi session ID ───────────────────────────────────────────────────────
   useEffect(() => {
     const getVapiSession = async () => {
       try {
@@ -114,97 +216,134 @@ export function CallScreen({
     getVapiSession();
   }, [session]);
 
-  // Start call once context is loaded
+  // ── Start call with usage check + fallback logic ──────────────────────────────
   useEffect(() => {
     if (previousContext === null) return;
     let cancelled = false;
+    let assistantIndex = 0;
 
-    const vapi = new Vapi(VAPI_PUBLIC_KEY);
-    vapiRef.current = vapi;
+    const startCall = async () => {
+      // Check monthly usage for free users
+      if (!isInnerCircle) {
+        const secondsUsed = await checkUsage();
+        setFreeSecondsUsed(secondsUsed);
+        const remainingSeconds = FREE_TRIAL_SECONDS - secondsUsed + topUpSeconds;
 
-    vapi.on("call-start", () => {
-      if (cancelled) return;
-      stopRinging(); // 🔔 Stop ringing when call connects
-      setStatus("waiting-agent");
-    });
-
-    vapi.on("speech-start", () => {
-      if (cancelled) return;
-      setAgentSpeaking(true);
-      setStatus("connected");
-      if (!startedTimerRef.current) {
-        startedTimerRef.current = true;
-        timerRef.current = setInterval(() => {
-          setDuration(d => {
-            const next = d + 1;
-            if (next === MAX_SECONDS - 30) setTimeWarning(true);
-            if (next >= MAX_SECONDS) {
-              window.clearInterval(timerRef.current!);
-              hangup(true);
-              return MAX_SECONDS;
-            }
-            return next;
-          });
-        }, 1000);
-      }
-    });
-
-    vapi.on("speech-end", () => {
-      if (cancelled) return;
-      setAgentSpeaking(false);
-    });
-
-    vapi.on("message", (msg: any) => {
-      if (msg?.type === "transcript" && msg?.transcript) {
-        messagesRef.current.push(`${msg.role}: ${msg.transcript}`);
-      }
-    });
-
-    vapi.on("call-end", () => {
-      stopRinging();
-      saveMemory();
-      cleanup();
-      onClose();
-    });
-
-    vapi.on("error", (e: unknown) => {
-      stopRinging();
-      const msg = (e as { message?: string })?.message ?? "Call error. Please try again.";
-      if (!cancelled) {
-        setError(msg);
-        setStatus("ending");
-      }
-    });
-
-    (async () => {
-      try {
-        const memoryContext = previousContext
-          ? `IMPORTANT: This student has spoken with you before. ${previousContext}. Continue from where you left off. Don't restart from scratch.`
-          : `This is ${firstName}'s first session. Welcome them warmly and ask what skill they want to monetize.`;
-
-        const planLabel = isInnerCircle ? "Inner Circle member" : "trial student";
-
-        await vapi.start(VAPI_ASSISTANT_ID, {
-          sessionId: vapiSessionId || undefined,
-          variableValues: {
-  studentKey: session, // ✅ required for cross-call memory now
-
-  firstName,
-  name: firstName,
-  student_name: firstName,
-  memory_context: memoryContext,
-  is_returning: isReturning ? "yes" : "no",
-  plan: planLabel,
-  minutes_available: String(Math.floor(MAX_SECONDS / 60)),
-},
-      } catch (e) {
-        stopRinging();
-        if (!cancelled) {
-          setError((e as Error)?.message ?? "Could not start call.");
+        if (remainingSeconds <= 0) {
+          stopRinging();
+          setBlockedNoMinutes(true);
           setStatus("ending");
+          return;
         }
       }
-    })();
+
+      const tryNextAssistant = async () => {
+        if (assistantIndex >= ASSISTANTS.length) {
+          stopRinging();
+          setError("Failed to connect. Please try again later.");
+          setStatus("ending");
+          return;
+        }
+
+        const { publicKey, assistantId } = ASSISTANTS[assistantIndex];
+        assistantIndex++;
+
+        try {
+          if (vapiRef.current) {
+            try { vapiRef.current.stop(); } catch { /* noop */ }
+            vapiRef.current = null;
+          }
+
+          const vapi = new Vapi(publicKey);
+          vapiRef.current = vapi;
+
+          vapi.on("call-start", () => {
+            if (cancelled) return;
+            stopRinging();
+            setStatus("waiting-agent");
+          });
+
+          vapi.on("speech-start", () => {
+            if (cancelled) return;
+            setAgentSpeaking(true);
+            setStatus("connected");
+            if (!startedTimerRef.current) {
+              startedTimerRef.current = true;
+              const remainingSeconds = isInnerCircle
+                ? INNER_CIRCLE_SECONDS
+                : FREE_TRIAL_SECONDS - freeSecondsUsed + topUpSeconds;
+
+              timerRef.current = setInterval(() => {
+                setDuration((d) => {
+                  const next = d + 1;
+                  if (next === remainingSeconds - 30) setTimeWarning(true);
+                  if (next >= remainingSeconds) {
+                    window.clearInterval(timerRef.current!);
+                    hangup(true);
+                    return remainingSeconds;
+                  }
+                  return next;
+                });
+              }, 1000);
+            }
+          });
+
+          vapi.on("speech-end", () => {
+            if (cancelled) return;
+            setAgentSpeaking(false);
+          });
+
+          vapi.on("message", (msg: any) => {
+            if (msg?.type === "transcript" && msg?.transcript) {
+              messagesRef.current.push(`${msg.role}: ${msg.transcript}`);
+            }
+          });
+
+          vapi.on("call-end", () => {
+            stopRinging();
+            saveUsage(duration);
+            saveMemory();
+            cleanup();
+            onClose();
+          });
+
+          vapi.on("error", () => {
+            tryNextAssistant();
+          });
+
+          const memoryContext = previousContext
+            ? `IMPORTANT: This student has spoken with you before. ${previousContext}. Continue from where you left off. Don't restart from scratch.`
+            : `This is ${firstName}'s first session. Welcome them warmly and ask what skill they want to monetize.`;
+
+          const planLabel = isInnerCircle ? "Inner Circle member" : "trial student";
+
+          await vapi.start(assistantId, {
+            sessionId: vapiSessionId || undefined,
+            variableValues: {
+              studentKey: session,
+              name: firstName,
+              student_name: firstName,
+              memory_context: memoryContext,
+              is_returning: isReturning ? "yes" : "no",
+              plan: planLabel,
+              minutes_available: String(
+                Math.floor(
+                  (isInnerCircle
+                    ? INNER_CIRCLE_SECONDS
+                    : FREE_TRIAL_SECONDS - freeSecondsUsed + topUpSeconds) / 60
+                )
+              ),
+            },
+          });
+        } catch {
+          tryNextAssistant();
+        }
+      };
+
+      tryNextAssistant();
+    };
+
+    startCall();
 
     return () => {
       cancelled = true;
@@ -221,7 +360,7 @@ export function CallScreen({
       const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer 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`,
+          Authorization: `Bearer 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`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -243,8 +382,7 @@ export function CallScreen({
       const text = groqData.choices[0]?.message?.content || "{}";
 
       let parsed = { summary: "", last_topic: "", progress: "" };
-      try { parsed = JSON.parse(text.replace(/```json|```/g, "").trim()); }
-      catch { /* noop */ }
+      try { parsed = JSON.parse(text.replace(/```json|```/g, "").trim()); } catch { /* noop */ }
 
       await supabase.from("voice_call_memory").insert({
         session,
@@ -273,6 +411,7 @@ export function CallScreen({
   const hangup = (timeUp = false) => {
     setStatus("ending");
     stopRinging();
+    saveUsage(duration);
     saveMemory();
     cleanup();
     onClose();
@@ -283,20 +422,23 @@ export function CallScreen({
     const v = vapiRef.current;
     if (!v) return;
     const next = !muted;
-    try { v.setMuted(next); setMuted(next); }
-    catch (e) { console.error(e); }
+    setMuted(next);
+    try { v.setMuted(next); } catch (e) { console.error(e); }
   };
 
-  const timeRemaining = MAX_SECONDS - duration;
+  const remainingSeconds = isInnerCircle
+    ? INNER_CIRCLE_SECONDS
+    : FREE_TRIAL_SECONDS - freeSecondsUsed + topUpSeconds;
+  const timeRemaining = remainingSeconds - duration;
   const mm = String(Math.floor(timeRemaining / 60)).padStart(2, "0");
   const ss = String(timeRemaining % 60).padStart(2, "0");
 
   const planLabel = isInnerCircle
-    ? `Inner Circle — ${Math.floor(MAX_SECONDS / 60)} mins/day`
-    : `Free Trial — ${Math.floor(FREE_TRIAL_SECONDS / 60)} mins/day`;
+    ? `Inner Circle — ${Math.floor(INNER_CIRCLE_SECONDS / 60)} mins/day`
+    : `Free Trial — ${Math.floor(remainingSeconds / 60)} mins left this month`;
 
   const statusLabel = {
-    connecting: "Calling your coach... 📞",
+    connecting: "Calling your coach... 🔔",
     "waiting-agent": "Coach is joining...",
     connected: "Live with your coach",
     ending: "Ending...",
@@ -308,6 +450,47 @@ export function CallScreen({
     connected: "text-green-300",
     ending: "text-gray-400",
   }[status];
+
+  // ── Blocked screen (no minutes left) ─────────────────────────────────────────
+  if (blockedNoMinutes) {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#050505] flex flex-col items-center justify-center px-6">
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, rgba(147,51,234,0.25) 0%, transparent 60%)",
+          }}
+        />
+        <div className="relative flex flex-col items-center text-center gap-4">
+          <div
+            className="h-24 w-24 rounded-full flex items-center justify-center text-4xl"
+            style={{ background: "linear-gradient(135deg, #5B21B6, #9333EA)" }}
+          >
+            🔒
+          </div>
+          <h2 className="text-2xl font-bold text-white">
+            Your Free Minutes Are Used Up
+          </h2>
+          <p className="text-white/60 text-sm max-w-xs">
+            You've used your 10 free minutes for this month. Subscribe to Premium to keep coaching and unlock more time!
+          </p>
+          <button
+            onClick={onClose}
+            className="mt-4 px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-700 text-white font-semibold transition"
+          >
+            Subscribe to Premium
+          </button>
+          <button
+            onClick={onClose}
+            className="text-white/40 text-xs underline"
+          >
+            Maybe later
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-[#050505] flex flex-col items-center justify-center px-6">
@@ -343,30 +526,32 @@ export function CallScreen({
         </div>
 
         <h2 className="text-2xl font-bold text-white mb-1">
-          Your K2Ç Personalised AI Coach
+          Your K2C Personalised AI Coach
         </h2>
         <p className="mt-1 text-sm text-white/60">
           Hi {firstName}, glad you called. 👋
         </p>
 
         {/* Plan badge */}
-        <span className={`mt-2 px-3 py-1 rounded-full text-xs font-semibold ${
-          isInnerCircle
-            ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
-            : "bg-green-500/20 text-green-400 border border-green-500/30"
-        }`}>
+        <span
+          className={`mt-2 px-3 py-1 rounded-full text-xs font-semibold ${
+            isInnerCircle
+              ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
+              : "bg-green-500/20 text-green-400 border border-green-500/30"
+          }`}
+        >
           {planLabel}
         </span>
 
         {previousContext && (
-          <p className="mt-2 text-xs text-purple-400 text-center">
+          <div className="mt-2 text-xs text-purple-400 text-center">
             ✨ Continuing from your last session
-          </p>
+          </div>
         )}
 
         {/* Status */}
         <div className="mt-4 flex items-center gap-2 text-sm">
-          {(status === "connecting" || status === "waiting-agent") ? (
+          {status === "connecting" || status === "waiting-agent" ? (
             <Loader2 className={`h-4 w-4 animate-spin ${statusColor}`} />
           ) : status === "connected" ? (
             <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
@@ -376,9 +561,11 @@ export function CallScreen({
 
         {/* Countdown */}
         {status === "connected" && (
-          <div className={`mt-6 text-6xl font-mono tabular-nums font-bold ${
-            timeWarning ? "text-red-400 animate-pulse" : "text-white"
-          }`}>
+          <div
+            className={`mt-6 text-6xl font-mono tabular-nums font-bold ${
+              timeWarning ? "text-red-400 animate-pulse" : "text-white"
+            }`}
+          >
             {mm}:{ss}
           </div>
         )}
@@ -396,7 +583,9 @@ export function CallScreen({
         )}
 
         {error && (
-          <p className="mt-4 max-w-xs text-center text-sm text-red-400">{error}</p>
+          <div className="mt-4 max-w-xs text-center text-sm text-red-400">
+            {error}
+          </div>
         )}
 
         {/* Controls */}
@@ -411,16 +600,17 @@ export function CallScreen({
               }`}
               aria-label={muted ? "Unmute" : "Mute"}
             >
-              {muted
-                ? <MicOff className="h-6 w-6 text-red-400" />
-                : <Mic className="h-6 w-6 text-white" />
-              }
+              {muted ? (
+                <MicOff className="h-6 w-6 text-red-400" />
+              ) : (
+                <Mic className="h-6 w-6 text-white" />
+              )}
             </button>
           )}
 
           <button
             onClick={() => hangup(false)}
-            className="h-20 w-20 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center shadow-[0_0_50px_rgba(239,68,68,0.6)] transition active:scale-95"
+            className="h-14 w-14 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center shadow-[0_0_50px_rgba(239,68,68,0.6)] transition active:scale-95"
             aria-label="End call"
           >
             <PhoneOff className="h-8 w-8 text-white" />
