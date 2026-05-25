@@ -19,6 +19,7 @@ import {
 } from "@/lib/portal.functions";
 import { VoiceCallPanel } from "@/components/portal/VoiceCallPanel";
 import { AmbassadorPanel } from "@/components/portal/AmbassadorPanel";
+import { BookEditorPanel } from "@/components/portal/BookEditorPanel";
 
 export const Route = createFileRoute("/_authenticated/portal")({
   head: () => ({
@@ -166,6 +167,8 @@ function PortalPage() {
               </div>
             )}
           </div>
+
+          <BookEditorPanel />
         </div>
       </main>
 
