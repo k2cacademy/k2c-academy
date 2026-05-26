@@ -265,7 +265,7 @@ export function CallScreen({
 
         if (assistantIndex >= ASSISTANTS.length) {
           stopRinging();
-          setError("Failed to connect. Please try again later.");
+          setError("All coaching sessions are currently busy. Please try again in a few minutes.");
           setStatus("ending");
           return;
         }
