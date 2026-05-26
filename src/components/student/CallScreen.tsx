@@ -321,9 +321,16 @@ export function CallScreen({
           // ── Error: try next immediately ───────────────────────────────
           vapi.on("error", (e: unknown) => {
   if (cancelled) return;
-  if (callFailed) return; // prevent double trigger
+  if (callFailed) return;
   callFailed = true;
-  console.log(`Assistant ${assistantIndex} failed, trying next...`);
+  setError(null); // Clear any error showing
+  setStatus("connecting"); // Reset status to connecting
+  try { vapiRef.current?.stop(); } catch { /* noop */ }
+  vapiRef.current = null;
+  setTimeout(() => {
+    if (!cancelled) tryNextAssistant();
+  }, 800);
+});
   // Clean up current vapi instance first
   try { vapiRef.current?.stop(); } catch { /* noop */ }
   vapiRef.current = null;
