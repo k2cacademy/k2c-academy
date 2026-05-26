@@ -3,7 +3,6 @@ import { PhoneOff, Mic, MicOff, Loader2 } from "lucide-react";
 import Vapi from "@vapi-ai/web";
 import { supabase } from "@/integrations/supabase/client";
 
-// ── Assistants (Main + 3 fallbacks) ──────────────────────────────────────────
 const ASSISTANTS = [
   {
     publicKey: "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1",
@@ -23,7 +22,6 @@ const ASSISTANTS = [
   },
 ];
 
-// ── Ringtones ─────────────────────────────────────────────────────────────────
 const RINGTONES = [
   "/From Knowledge to Cash.mp3",
   "/From Knowledge to Cash (1).mp3",
@@ -33,6 +31,14 @@ const FREE_TRIAL_SECONDS = 10 * 60;
 const INNER_CIRCLE_SECONDS = 10 * 60;
 
 type CallStatus = "connecting" | "waiting-agent" | "connected" | "ending";
+
+// ── Pre-load ringtones so they play instantly ─────────────────────────────
+const preloadedAudio = RINGTONES.map((src) => {
+  const audio = new Audio(src);
+  audio.preload = "auto";
+  audio.volume = 0.6;
+  return audio;
+});
 
 export function CallScreen({
   session,
@@ -72,24 +78,74 @@ export function CallScreen({
   const usageRef = useRef<{ id: string; free_seconds_used: number } | null>(null);
   const durationRef = useRef(0);
 
-  const baseSeconds = isInnerCircle ? INNER_CIRCLE_SECONDS : FREE_TRIAL_SECONDS;
   const topUpSeconds = purchasedMinutes * 60;
 
-  // ── Keep durationRef in sync ──────────────────────────────────────────────
   useEffect(() => {
     durationRef.current = duration;
   }, [duration]);
 
+  // ── Ringtone: starts immediately on mount (triggered by button click) ─────
+  useEffect(() => {
+    let currentIndex = 0;
+
+    const playNext = () => {
+      // Stop current
+      if (ringAudioRef.current) {
+        ringAudioRef.current.pause();
+        ringAudioRef.current.currentTime = 0;
+      }
+      // Use preloaded audio
+      const audio = preloadedAudio[currentIndex % preloadedAudio.length];
+      audio.currentTime = 0;
+      audio.volume = 0.6;
+      audio.loop = false;
+      ringAudioRef.current = audio;
+      // Play immediately — works because user just clicked a button
+      audio.play().catch(() => {
+        // Fallback: try creating fresh Audio object
+        const freshAudio = new Audio(RINGTONES[currentIndex % RINGTONES.length]);
+        freshAudio.volume = 0.6;
+        freshAudio.play().catch(() => {});
+        ringAudioRef.current = freshAudio;
+      });
+      currentIndex++;
+    };
+
+    // Play first track immediately
+    playNext();
+
+    // Switch track every 15 seconds
+    ringIntervalRef.current = setInterval(playNext, 15000);
+
+    return () => {
+      if (ringIntervalRef.current) clearInterval(ringIntervalRef.current);
+      if (ringAudioRef.current) {
+        ringAudioRef.current.pause();
+        ringAudioRef.current.currentTime = 0;
+      }
+    };
+  }, []);
+
+  const stopRinging = () => {
+    if (ringIntervalRef.current) {
+      clearInterval(ringIntervalRef.current);
+      ringIntervalRef.current = null;
+    }
+    if (ringAudioRef.current) {
+      ringAudioRef.current.pause();
+      ringAudioRef.current.currentTime = 0;
+      ringAudioRef.current = null;
+    }
+  };
+
   // ── Check & reset monthly usage ───────────────────────────────────────────
   const checkUsage = async (): Promise<number> => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("user_usage")
         .select("id, free_seconds_used, last_reset, plan")
         .eq("session", session)
         .maybeSingle();
-
-      if (error) throw error;
 
       const now = new Date();
 
@@ -125,7 +181,6 @@ export function CallScreen({
     }
   };
 
-  // ── Save seconds used after call ──────────────────────────────────────────
   const saveUsage = async (secondsUsed: number) => {
     if (!usageRef.current || isInnerCircle) return;
     try {
@@ -136,41 +191,6 @@ export function CallScreen({
         .eq("id", usageRef.current.id);
     } catch (e) {
       console.error("Failed to save usage:", e);
-    }
-  };
-
-  // ── Ringtone: alternate between tracks ────────────────────────────────────
-  useEffect(() => {
-    const playNext = () => {
-      if (ringAudioRef.current) {
-        ringAudioRef.current.pause();
-        ringAudioRef.current.currentTime = 0;
-      }
-      const src = RINGTONES[ringtoneIndexRef.current % RINGTONES.length];
-      ringtoneIndexRef.current += 1;
-      const audio = new Audio(src);
-      audio.volume = 0.6;
-      ringAudioRef.current = audio;
-      audio.play().catch(() => {});
-    };
-
-    playNext();
-    ringIntervalRef.current = setInterval(playNext, 15000);
-
-    return () => {
-      if (ringIntervalRef.current) clearInterval(ringIntervalRef.current);
-      if (ringAudioRef.current) {
-        ringAudioRef.current.pause();
-        ringAudioRef.current.currentTime = 0;
-      }
-    };
-  }, []);
-
-  const stopRinging = () => {
-    if (ringIntervalRef.current) clearInterval(ringIntervalRef.current);
-    if (ringAudioRef.current) {
-      ringAudioRef.current.pause();
-      ringAudioRef.current.currentTime = 0;
     }
   };
 
@@ -219,18 +239,19 @@ export function CallScreen({
     getVapiSession();
   }, [session]);
 
-  // ── Start call with usage check + fallback logic ──────────────────────────
+  // ── Start call with usage check + fast fallback ───────────────────────────
   useEffect(() => {
     if (previousContext === null) return;
     let cancelled = false;
     let assistantIndex = 0;
+    let freeSecondsUsedLocal = 0;
 
     const startCall = async () => {
       if (!isInnerCircle) {
         const secondsUsed = await checkUsage();
+        freeSecondsUsedLocal = secondsUsed;
         setFreeSecondsUsed(secondsUsed);
         const remainingSeconds = FREE_TRIAL_SECONDS - secondsUsed + topUpSeconds;
-
         if (remainingSeconds <= 0) {
           stopRinging();
           setBlockedNoMinutes(true);
@@ -252,10 +273,11 @@ export function CallScreen({
         const { publicKey, assistantId } = ASSISTANTS[assistantIndex];
         assistantIndex++;
 
-        // ── KEY FIX: track if this attempt failed ────────────────────────
         let callFailed = false;
+        let speechHappened = false;
 
         try {
+          // Clean up previous instance fast
           if (vapiRef.current) {
             try { vapiRef.current.stop(); } catch { /* noop */ }
             vapiRef.current = null;
@@ -264,38 +286,17 @@ export function CallScreen({
           const vapi = new Vapi(publicKey);
           vapiRef.current = vapi;
 
-          // ── ERROR: mark failed and try next immediately ───────────────
-          vapi.on("error", () => {
-            if (cancelled) return;
-            callFailed = true;
-            tryNextAssistant(); // 👈 switch to next assistant
-          });
-
-          // ── CALL END: only close if NOT a failed fallback ─────────────
-          vapi.on("call-end", () => {
-            if (callFailed) return; // 👈 ignore if we're switching
-            stopRinging();
-            saveUsage(durationRef.current);
-            saveMemory();
-            cleanup();
-            onClose();
-          });
-
-          vapi.on("call-start", () => {
-            if (cancelled) return;
-            stopRinging();
-            setStatus("waiting-agent");
-          });
-
+          // ── Catch silent failures (no speech + call ends) ─────────────
           vapi.on("speech-start", () => {
             if (cancelled) return;
+            speechHappened = true;
             setAgentSpeaking(true);
             setStatus("connected");
             if (!startedTimerRef.current) {
               startedTimerRef.current = true;
               const remainingSeconds = isInnerCircle
                 ? INNER_CIRCLE_SECONDS
-                : FREE_TRIAL_SECONDS - freeSecondsUsed + topUpSeconds;
+                : FREE_TRIAL_SECONDS - freeSecondsUsedLocal + topUpSeconds;
 
               timerRef.current = setInterval(() => {
                 setDuration((d) => {
@@ -315,6 +316,35 @@ export function CallScreen({
           vapi.on("speech-end", () => {
             if (cancelled) return;
             setAgentSpeaking(false);
+          });
+
+          // ── Error: try next immediately ───────────────────────────────
+          vapi.on("error", () => {
+            if (cancelled) return;
+            callFailed = true;
+            tryNextAssistant();
+          });
+
+          // ── Call end: try next if no speech happened ──────────────────
+          vapi.on("call-end", () => {
+            if (callFailed) return;
+            if (!speechHappened) {
+              // Silent failure — try next assistant
+              callFailed = true;
+              tryNextAssistant();
+              return;
+            }
+            stopRinging();
+            saveUsage(durationRef.current);
+            saveMemory();
+            cleanup();
+            onClose();
+          });
+
+          vapi.on("call-start", () => {
+            if (cancelled) return;
+            stopRinging();
+            setStatus("waiting-agent");
           });
 
           vapi.on("message", (msg: any) => {
@@ -342,14 +372,13 @@ export function CallScreen({
                 Math.floor(
                   (isInnerCircle
                     ? INNER_CIRCLE_SECONDS
-                    : FREE_TRIAL_SECONDS - freeSecondsUsed + topUpSeconds) / 60
+                    : FREE_TRIAL_SECONDS - freeSecondsUsedLocal + topUpSeconds) / 60
                 )
               ),
             },
           });
 
         } catch {
-          // vapi.start() itself threw — try next
           if (!cancelled) tryNextAssistant();
         }
       };
@@ -465,7 +494,6 @@ export function CallScreen({
     ending: "text-gray-400",
   }[status];
 
-  // ── Blocked screen ────────────────────────────────────────────────────────
   if (blockedNoMinutes) {
     return (
       <div className="fixed inset-0 z-50 bg-[#050505] flex flex-col items-center justify-center px-6">
@@ -517,7 +545,6 @@ export function CallScreen({
       />
 
       <div className="relative flex flex-col items-center">
-        {/* Avatar */}
         <div
           className={`h-40 w-40 rounded-full flex items-center justify-center text-white text-3xl font-bold mb-6 transition-all duration-300 ${
             status === "connecting"
