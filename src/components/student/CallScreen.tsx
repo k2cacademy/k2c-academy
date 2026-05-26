@@ -319,12 +319,19 @@ export function CallScreen({
           });
 
           // ── Error: try next immediately ───────────────────────────────
-          vapi.on("error", () => {
-            if (cancelled) return;
-            callFailed = true;
-            tryNextAssistant();
-          });
-
+          vapi.on("error", (e: unknown) => {
+  if (cancelled) return;
+  if (callFailed) return; // prevent double trigger
+  callFailed = true;
+  console.log(`Assistant ${assistantIndex} failed, trying next...`);
+  // Clean up current vapi instance first
+  try { vapiRef.current?.stop(); } catch { /* noop */ }
+  vapiRef.current = null;
+  // Small delay before trying next
+  setTimeout(() => {
+    if (!cancelled) tryNextAssistant();
+  }, 500);
+});
           // ── Call end: try next if no speech happened ──────────────────
           vapi.on("call-end", () => {
             if (callFailed) return;
