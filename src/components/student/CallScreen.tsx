@@ -282,13 +282,16 @@ if (assistantIndex >= ASSISTANTS.length) {
             vapiRef.current = null;
           }
 
-          const vapi = new Vapi(publicKey);
+          const vapi = new Vapi(publicKey, {
+  apiRequestErrorRetryCount: 0,
+});
           vapiRef.current = vapi;
 
           // ── Catch silent failures (no speech + call ends) ─────────────
           vapi.on("speech-start", () => {
-            if (cancelled) return;
-            speechHappened = true;
+  if (cancelled) return;
+  speechHappened = true;
+  clearTimeout(silenceTimeout);
             setAgentSpeaking(true);
             setStatus("connected");
             if (!startedTimerRef.current) {
@@ -340,20 +343,24 @@ if (assistantIndex >= ASSISTANTS.length) {
 });
           // ── Call end: try next if no speech happened ──────────────────
           vapi.on("call-end", () => {
-            if (callFailed) return;
-            if (!speechHappened) {
-              // Silent failure — try next assistant
-              callFailed = true;
-              tryNextAssistant();
-              return;
-            }
-            stopRinging();
-            saveUsage(durationRef.current);
-            saveMemory();
-            cleanup();
-            onClose();
-          });
-
+  if (callFailed) return;
+  if (!speechHappened) {
+    callFailed = true;
+    setError(null);
+    setStatus("connecting");
+    try { vapiRef.current?.stop(); } catch { /* noop */ }
+    vapiRef.current = null;
+    setTimeout(() => {
+      if (!cancelled) tryNextAssistant();
+    }, 300);
+    return;
+  }
+  stopRinging();
+  saveUsage(durationRef.current);
+  saveMemory();
+  cleanup();
+  onClose();
+});
           vapi.on("call-start", () => {
             if (cancelled) return;
             stopRinging();
@@ -391,6 +398,17 @@ if (assistantIndex >= ASSISTANTS.length) {
             },
           });
 
+// Force fallback if no speech within 8 seconds
+const silenceTimeout = setTimeout(() => {
+  if (!speechHappened && !callFailed && !cancelled) {
+    callFailed = true;
+    setError(null);
+    setStatus("connecting");
+    try { vapiRef.current?.stop(); } catch { /* noop */ }
+    vapiRef.current = null;
+    tryNextAssistant();
+  }
+}, 8000);
         } catch {
           if (!cancelled) tryNextAssistant();
         }
