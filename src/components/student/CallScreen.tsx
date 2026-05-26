@@ -4,16 +4,25 @@ import Vapi from "@vapi-ai/web";
 import { supabase } from "@/integrations/supabase/client";
 
 const ASSISTANTS = [
-  { publicKey: "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1", assistantId: "a16cf991-f420-44f4-8460-0129939c9fe3" },
-  { publicKey: "e6bf041d-1c62-4b94-a93c-52b563eef22c", assistantId: "5c3ce312-2f00-486c-8cd9-7da43417af4d" },
-  { publicKey: "2ef0603f-4704-4cf4-9be8-a581fc68b192", assistantId: "d1fd7394-f3bc-4a1d-8181-a05a4978c572" },
-  { publicKey: "04b01653-b99c-4749-b012-be91aa031768", assistantId: "e4d008ae-429f-4248-a503-33f30917b28e" },
+  {
+    publicKey: "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1",
+    assistantId: "a16cf991-f420-44f4-8460-0129939c9fe3",
+  },
+  {
+    publicKey: "e6bf041d-1c62-4b94-a93c-52b563eef22c",
+    assistantId: "5c3ce312-2f00-486c-8cd9-7da43417af4d",
+  },
+  {
+    publicKey: "2ef0603f-4704-4cf4-9be8-a581fc68b192",
+    assistantId: "d1fd7394-f3bc-4a1d-8181-a05a4978c572",
+  },
+  {
+    publicKey: "04b01653-b99c-4749-b012-be91aa031768",
+    assistantId: "e4d008ae-429f-4248-a503-33f30917b28e",
+  },
 ];
 
-const RINGTONES = [
-  "/From Knowledge to Cash.mp3",
-  "/From Knowledge to Cash (1).mp3",
-];
+const RINGTONES = ["/From Knowledge to Cash.mp3", "/From Knowledge to Cash (1).mp3"];
 
 const FREE_TRIAL_SECONDS = 10 * 60;
 const INNER_CIRCLE_SECONDS = 10 * 60;
@@ -105,30 +114,56 @@ export function CallScreen({
   }, []);
 
   const stopRinging = () => {
-    if (ringIntervalRef.current) { clearInterval(ringIntervalRef.current); ringIntervalRef.current = null; }
-    if (ringAudioRef.current) { ringAudioRef.current.pause(); ringAudioRef.current.currentTime = 0; ringAudioRef.current = null; }
+    if (ringIntervalRef.current) {
+      clearInterval(ringIntervalRef.current);
+      ringIntervalRef.current = null;
+    }
+    if (ringAudioRef.current) {
+      ringAudioRef.current.pause();
+      ringAudioRef.current.currentTime = 0;
+      ringAudioRef.current = null;
+    }
   };
 
   // ── Usage tracking ────────────────────────────────────────────────────────
   const checkUsage = async (): Promise<number> => {
     try {
-      const { data } = await supabase.from("user_usage").select("id, free_seconds_used, last_reset, plan").eq("session", session).maybeSingle();
+      const { data } = await supabase
+        .from("user_usage")
+        .select("id, free_seconds_used, last_reset, plan")
+        .eq("session", session)
+        .maybeSingle();
+
       const now = new Date();
+
       if (!data) {
-        const { data: newData } = await supabase.from("user_usage").insert({ session, free_seconds_used: 0, plan: "free" }).select().single();
+        const { data: newData } = await supabase
+          .from("user_usage")
+          .insert({ session, free_seconds_used: 0, plan: "free" })
+          .select()
+          .single();
         usageRef.current = { id: newData.id, free_seconds_used: 0 };
         return 0;
       }
+
       const lastReset = new Date(data.last_reset);
-      const isNewMonth = now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear();
+      const isNewMonth =
+        now.getMonth() !== lastReset.getMonth() || now.getFullYear() !== lastReset.getFullYear();
+
       if (isNewMonth) {
-        await supabase.from("user_usage").update({ free_seconds_used: 0, last_reset: now.toISOString() }).eq("id", data.id);
+        await supabase
+          .from("user_usage")
+          .update({ free_seconds_used: 0, last_reset: now.toISOString() })
+          .eq("id", data.id);
         usageRef.current = { id: data.id, free_seconds_used: 0 };
         return 0;
       }
+
       usageRef.current = { id: data.id, free_seconds_used: data.free_seconds_used };
       return data.free_seconds_used;
-    } catch { return 0; }
+    } catch {
+      return 0;
+    }
   };
 
   const saveUsage = async (secondsUsed: number) => {
@@ -136,36 +171,58 @@ export function CallScreen({
     try {
       const newTotal = usageRef.current.free_seconds_used + secondsUsed;
       await supabase.from("user_usage").update({ free_seconds_used: newTotal }).eq("id", usageRef.current.id);
-    } catch { /* noop */ }
+    } catch {
+      /* noop */
+    }
   };
 
   // ── Load memory ───────────────────────────────────────────────────────────
   useEffect(() => {
     const loadContext = async () => {
       try {
-        const { data } = await supabase.from("voice_call_memory").select("summary, last_topic, progress").eq("session", session).order("created_at", { ascending: false }).limit(1).maybeSingle();
-        setPreviousContext(data ? `Previous session summary: ${data.summary}. Last topic: ${data.last_topic}. Progress: ${data.progress}` : "");
-      } catch { setPreviousContext(""); }
+        const { data } = await supabase
+          .from("voice_call_memory")
+          .select("summary, last_topic, progress")
+          .eq("session", session)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        setPreviousContext(
+          data
+            ? `Previous session summary: ${data.summary}. Last topic: ${data.last_topic}. Progress: ${data.progress}`
+            : ""
+        );
+      } catch {
+        setPreviousContext("");
+      }
     };
     loadContext();
   }, [session]);
 
-  // ── Get Vapi session ID ───────────────────────────────────────────────────
+  // ── Get Vapi session ID (optional; safe to omit for web calls) ─────────────
   useEffect(() => {
     const getVapiSession = async () => {
       try {
-        const res = await fetch("/api/public/hooks/vapi-session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session }) });
+        const res = await fetch("/api/public/hooks/vapi-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session }),
+        });
         const data = await res.json();
         setVapiSessionId(data.vapiSessionId);
         setIsReturning(data.isReturning);
-      } catch { setVapiSessionId(null); }
+      } catch {
+        setVapiSessionId(null);
+      }
     };
     getVapiSession();
   }, [session]);
 
-  // ── Main call logic with clean fallback ───────────────────────────────────
+  // ── Main call logic with reliable fallback ─────────────────────────────────
   useEffect(() => {
     if (previousContext === null) return;
+
     cancelledRef.current = false;
     assistantIndexRef.current = 0;
     let freeSecondsUsedLocal = 0;
@@ -173,7 +230,6 @@ export function CallScreen({
     const tryAssistant = async () => {
       if (cancelledRef.current) return;
 
-      // All assistants exhausted
       if (assistantIndexRef.current >= ASSISTANTS.length) {
         stopRinging();
         setError("All coaching sessions are currently busy. Please try again in a few minutes.");
@@ -182,63 +238,95 @@ export function CallScreen({
       }
 
       const { publicKey, assistantId } = ASSISTANTS[assistantIndexRef.current];
+      const slotNumber = assistantIndexRef.current + 1;
       assistantIndexRef.current++;
 
-      console.log(`Trying assistant ${assistantIndexRef.current}/${ASSISTANTS.length}: ${assistantId}`);
+      console.log(`Trying assistant ${slotNumber}/${ASSISTANTS.length}: ${assistantId}`);
 
-      // Clean up previous Vapi instance
+      // Clean up prior instance
       if (vapiRef.current) {
-        try { vapiRef.current.stop(); } catch { /* noop */ }
+        try {
+          vapiRef.current.stop();
+        } catch {
+          /* noop */
+        }
         vapiRef.current = null;
       }
 
-      let speechHappened = false;
-      let failed = false;
-      let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+      // IMPORTANT: small backoff between instances
+      await new Promise((r) => setTimeout(r, 350));
 
-      const failAndRetry = () => {
+      let failed = false;
+      let gotCallStart = false;
+
+      let connectTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const cleanupTimers = () => {
+        if (connectTimer) {
+          clearTimeout(connectTimer);
+          connectTimer = null;
+        }
+      };
+
+      const failAndRetry = (reason?: any) => {
         if (failed || cancelledRef.current) return;
         failed = true;
-        if (silenceTimer) clearTimeout(silenceTimer);
+
+        cleanupTimers();
+
+        console.log("Failing over. Reason:", reason);
+
         setError(null);
         setStatus("connecting");
+
         if (vapiRef.current) {
-          try { vapiRef.current.stop(); } catch { /* noop */ }
+          try {
+            vapiRef.current.stop();
+          } catch {
+            /* noop */
+          }
           vapiRef.current = null;
         }
+
         setTimeout(() => {
           if (!cancelledRef.current) tryAssistant();
-        }, 500);
+        }, 700);
       };
 
       try {
         const vapi = new Vapi(publicKey);
         vapiRef.current = vapi;
 
+        connectTimer = setTimeout(() => {
+          if (!gotCallStart && !failed && !cancelledRef.current) {
+            console.log("No call-start within 20s — trying next assistant");
+            failAndRetry({ type: "connect-timeout" });
+          }
+        }, 20000);
+
         vapi.on("call-start", () => {
           if (cancelledRef.current) return;
+          gotCallStart = true;
+          cleanupTimers();
           stopRinging();
-          setStatus("waiting-agent");
-          // Start silence timeout — if no speech in 8s, try next
-          silenceTimer = setTimeout(() => {
-            if (!speechHappened && !failed && !cancelledRef.current) {
-              console.log("Silence timeout — trying next assistant");
-              failAndRetry();
-            }
-          }, 8000);
+          setStatus("waiting-agent"); // transport connected; waiting for first assistant speech
         });
 
         vapi.on("speech-start", () => {
           if (cancelledRef.current) return;
-          speechHappened = true;
-          if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
           setAgentSpeaking(true);
+
+          // Only now mark "connected" UI (assistant is speaking)
           setStatus("connected");
+
           if (!startedTimerRef.current) {
             startedTimerRef.current = true;
-            const remainingSeconds = isInnerCircle ? INNER_CIRCLE_SECONDS : FREE_TRIAL_SECONDS - freeSecondsUsedLocal + topUpSeconds;
+            const remainingSeconds = isInnerCircle
+              ? INNER_CIRCLE_SECONDS
+              : FREE_TRIAL_SECONDS - freeSecondsUsedLocal + topUpSeconds;
+
             timerRef.current = setInterval(() => {
-              setDuration(d => {
+              setDuration((d) => {
                 const next = d + 1;
                 if (next === remainingSeconds - 30) setTimeWarning(true);
                 if (next >= remainingSeconds) {
@@ -257,19 +345,48 @@ export function CallScreen({
           setAgentSpeaking(false);
         });
 
-        vapi.on("error", () => {
-          console.log(`Assistant ${assistantIndexRef.current} error — trying next`);
-          failAndRetry();
+        vapi.on("error", (err: any) => {
+          console.log("Vapi error payload:", err);
+
+          const msg = (err?.message || err?.error || "").toString().toLowerCase();
+          const code = (err?.statusCode || err?.code || "").toString();
+
+          const shouldFailover =
+            msg.includes("unauthorized") ||
+            msg.includes("forbidden") ||
+            msg.includes("payment") ||
+            msg.includes("credit") ||
+            msg.includes("billing") ||
+            msg.includes("rate limit") ||
+            msg.includes("timeout") ||
+            msg.includes("internal") ||
+            code === "401" ||
+            code === "402" ||
+            code === "403" ||
+            code === "429" ||
+            code.startsWith("5");
+
+          if (shouldFailover) return failAndRetry(err);
+
+          // non-failover error => show message
+          stopRinging();
+          setError(err?.message || "Call failed to start.");
+          setStatus("ending");
         });
 
         vapi.on("call-end", () => {
-          if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-          if (!speechHappened && !failed) {
-            console.log("Call ended with no speech — trying next assistant");
-            failAndRetry();
+          cleanupTimers();
+
+          // If call ended before call-start, treat as failure and retry next assistant
+          if (!gotCallStart && !failed && !cancelledRef.current) {
+            console.log("Call ended before call-start — trying next assistant");
+            failAndRetry({ type: "ended-before-start" });
             return;
           }
+
+          // If we already decided to failover, ignore
           if (failed) return;
+
           stopRinging();
           saveUsage(durationRef.current);
           saveMemory();
@@ -287,22 +404,32 @@ export function CallScreen({
           ? `IMPORTANT: This student has spoken with you before. ${previousContext}. Continue from where you left off.`
           : `This is ${firstName}'s first session. Welcome them warmly and ask what skill they want to monetize.`;
 
-        await vapi.start(assistantId, {
-          sessionId: vapiSessionId || undefined,
-          variableValues: {
-            studentKey: session,
-            name: firstName,
-            student_name: firstName,
-            memory_context: memoryContext,
-            is_returning: isReturning ? "yes" : "no",
-            plan: isInnerCircle ? "Inner Circle member" : "trial student",
-            minutes_available: String(Math.floor((isInnerCircle ? INNER_CIRCLE_SECONDS : FREE_TRIAL_SECONDS - freeSecondsUsedLocal + topUpSeconds) / 60)),
+        // ✅ Correct start signature for @vapi-ai/web v2.x
+        await vapi.start({
+          assistantId,
+          assistantOverrides: {
+            variableValues: {
+              studentKey: session,
+              name: firstName,
+              student_name: firstName,
+              memory_context: memoryContext,
+              is_returning: isReturning ? "yes" : "no",
+              plan: isInnerCircle ? "Inner Circle member" : "trial student",
+              minutes_available: String(
+                Math.floor(
+                  (isInnerCircle
+                    ? INNER_CIRCLE_SECONDS
+                    : FREE_TRIAL_SECONDS - freeSecondsUsedLocal + topUpSeconds) / 60
+                )
+              ),
+            },
           },
+          // For web calls, sessionId is optional; keep only if you know it's needed
+          sessionId: vapiSessionId || undefined,
         });
-
       } catch (e) {
-        console.log(`Assistant ${assistantIndexRef.current} threw error:`, e);
-        failAndRetry();
+        console.log(`Assistant ${slotNumber} threw error:`, e);
+        failAndRetry(e);
       }
     };
 
@@ -311,6 +438,7 @@ export function CallScreen({
         const secondsUsed = await checkUsage();
         freeSecondsUsedLocal = secondsUsed;
         setFreeSecondsUsed(secondsUsed);
+
         const remainingSeconds = FREE_TRIAL_SECONDS - secondsUsed + topUpSeconds;
         if (remainingSeconds <= 0) {
           stopRinging();
@@ -329,44 +457,72 @@ export function CallScreen({
       stopRinging();
       cleanup();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previousContext]);
 
   const saveMemory = async () => {
     try {
       const conversation = messagesRef.current.join("\n");
       if (!conversation) return;
+
+      // ⚠️ SECURITY: move this Groq call + key to your backend ASAP.
       const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { Authorization: `Bearer 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`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer gsk_REPLACE_THIS_AND_MOVE_TO_BACKEND`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           model: "llama3-8b-8192",
-          messages: [{ role: "system", content: "Summarize this coaching call. Return ONLY JSON: {summary, last_topic, progress}" }, { role: "user", content: conversation }],
-          max_tokens: 200, temperature: 0.1,
+          messages: [
+            { role: "system", content: "Summarize this coaching call. Return ONLY JSON: {summary, last_topic, progress}" },
+            { role: "user", content: conversation },
+          ],
+          max_tokens: 200,
+          temperature: 0.1,
         }),
       });
+
       if (!groqRes.ok) return;
+
       const groqData = await groqRes.json();
       const text = groqData.choices[0]?.message?.content || "{}";
+
       let parsed = { summary: "", last_topic: "", progress: "" };
-      try { parsed = JSON.parse(text.replace(/```json|```/g, "").trim()); } catch { /* noop */ }
+      try {
+        parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+      } catch {
+        /* noop */
+      }
+
       await supabase.from("voice_call_memory").insert({
-        session, student_name: firstName,
+        session,
+        student_name: firstName,
         summary: parsed.summary || conversation.slice(0, 200),
         last_topic: parsed.last_topic || "General coaching",
         progress: parsed.progress || "In progress",
         full_transcript: conversation,
         created_at: new Date().toISOString(),
       });
-    } catch { /* noop */ }
+    } catch {
+      /* noop */
+    }
   };
 
   const cleanup = () => {
     if (endingRef.current) return;
     endingRef.current = true;
+
     stopRinging();
+
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
-    try { vapiRef.current?.stop(); } catch { /* noop */ }
+
+    try {
+      vapiRef.current?.stop();
+    } catch {
+      /* noop */
+    }
     vapiRef.current = null;
   };
 
@@ -385,10 +541,17 @@ export function CallScreen({
     if (!v) return;
     const next = !muted;
     setMuted(next);
-    try { v.setMuted(next); } catch { /* noop */ }
+    try {
+      v.setMuted(next);
+    } catch {
+      /* noop */
+    }
   };
 
-  const remainingSeconds = isInnerCircle ? INNER_CIRCLE_SECONDS : FREE_TRIAL_SECONDS - freeSecondsUsed + topUpSeconds;
+  const remainingSeconds = isInnerCircle
+    ? INNER_CIRCLE_SECONDS
+    : FREE_TRIAL_SECONDS - freeSecondsUsed + topUpSeconds;
+
   const timeRemaining = remainingSeconds - duration;
   const mm = String(Math.floor(timeRemaining / 60)).padStart(2, "0");
   const ss = String(timeRemaining % 60).padStart(2, "0");
@@ -398,7 +561,7 @@ export function CallScreen({
     : `Free Trial — ${Math.floor(remainingSeconds / 60)} mins left this month`;
 
   const statusLabel = {
-    connecting: "Calling your coach... 🔔",
+    connecting: "Calling your coach...",
     "waiting-agent": "Coach is joining...",
     connected: "Live with your coach",
     ending: "Ending...",
@@ -414,13 +577,32 @@ export function CallScreen({
   if (blockedNoMinutes) {
     return (
       <div className="fixed inset-0 z-50 bg-[#050505] flex flex-col items-center justify-center px-6">
-        <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at center, rgba(147,51,234,0.25) 0%, transparent 60%)" }} />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: "radial-gradient(ellipse at center, rgba(147,51,234,0.25) 0%, transparent 60%)",
+          }}
+        />
         <div className="relative flex flex-col items-center text-center gap-4">
-          <div className="h-24 w-24 rounded-full flex items-center justify-center text-4xl" style={{ background: "linear-gradient(135deg, #5B21B6, #9333EA)" }}>🔒</div>
+          <div
+            className="h-24 w-24 rounded-full flex items-center justify-center text-4xl"
+            style={{ background: "linear-gradient(135deg, #5B21B6, #9333EA)" }}
+          >
+            🔒
+          </div>
           <h2 className="text-2xl font-bold text-white">Your Free Minutes Are Used Up</h2>
-          <p className="text-white/60 text-sm max-w-xs">You've used your free minutes for this month. Subscribe to Inner Circle to keep coaching!</p>
-          <button onClick={onClose} className="mt-4 px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-700 text-white font-semibold transition">Subscribe to Inner Circle</button>
-          <button onClick={onClose} className="text-white/40 text-xs underline">Maybe later</button>
+          <p className="text-white/60 text-sm max-w-xs">
+            You've used your free minutes for this month. Subscribe to Inner Circle to keep coaching!
+          </p>
+          <button
+            onClick={onClose}
+            className="mt-4 px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-700 text-white font-semibold transition"
+          >
+            Subscribe to Inner Circle
+          </button>
+          <button onClick={onClose} className="text-white/40 text-xs underline">
+            Maybe later
+          </button>
         </div>
       </div>
     );
@@ -428,68 +610,19 @@ export function CallScreen({
 
   return (
     <div className="fixed inset-0 z-50 bg-[#050505] flex flex-col items-center justify-center px-6">
-      <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at center, rgba(147,51,234,0.25) 0%, transparent 60%)" }} />
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: "radial-gradient(ellipse at center, rgba(147,51,234,0.25) 0%, transparent 60%)",
+        }}
+      />
       <div className="relative flex flex-col items-center">
         <div
-          className={`h-40 w-40 rounded-full flex items-center justify-center text-white text-3xl font-bold mb-6 transition-all duration-300 ${status === "connecting" ? "animate-pulse" : agentSpeaking ? "animate-pulse scale-110" : ""}`}
-          style={{ background: "linear-gradient(135deg, #5B21B6, #9333EA)", boxShadow: status === "connecting" ? "0 0 40px rgba(147,51,234,0.6)" : agentSpeaking ? "0 0 60px rgba(147,51,234,0.8)" : "0 0 40px rgba(147,51,234,0.4)" }}
-        >
-          {status === "connecting" ? "📞" : "AI"}
-        </div>
-
-        <h2 className="text-2xl font-bold text-white mb-1">Your K2Ç Personalised AI Coach</h2>
-        <p className="mt-1 text-sm text-white/60">Hi {firstName}, glad you called. 👋</p>
-
-        <span className={`mt-2 px-3 py-1 rounded-full text-xs font-semibold ${isInnerCircle ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" : "bg-green-500/20 text-green-400 border border-green-500/30"}`}>
-          {planLabel}
-        </span>
-
-        {previousContext && (
-          <div className="mt-2 text-xs text-purple-400 text-center">✨ Continuing from your last session</div>
-        )}
-
-        <div className="mt-4 flex items-center gap-2 text-sm">
-          {status === "connecting" || status === "waiting-agent" ? (
-            <Loader2 className={`h-4 w-4 animate-spin ${statusColor}`} />
-          ) : status === "connected" ? (
-            <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
-          ) : null}
-          <span className={statusColor}>{statusLabel}</span>
-        </div>
-
-        {status === "connected" && (
-          <div className={`mt-6 text-6xl font-mono tabular-nums font-bold ${timeWarning ? "text-red-400 animate-pulse" : "text-white"}`}>
-            {mm}:{ss}
-          </div>
-        )}
-
-        {timeWarning && status === "connected" && (
-          <p className="mt-2 text-xs text-red-400 animate-pulse">⚠️ 30 seconds left!</p>
-        )}
-
-        {purchasedMinutes > 0 && (
-          <p className="mt-1 text-xs text-blue-400 text-center">+{purchasedMinutes} purchased mins included</p>
-        )}
-
-        {error && (
-          <div className="mt-4 max-w-xs text-center text-sm text-red-400">{error}</div>
-        )}
-
-        <div className="mt-8 flex items-center gap-6">
-          {status === "connected" && (
-            <button onClick={toggleMute} className={`h-14 w-14 rounded-full flex items-center justify-center border transition ${muted ? "border-red-500 bg-red-500/20" : "border-white/20 bg-white/10 hover:bg-white/20"}`} aria-label={muted ? "Unmute" : "Mute"}>
-              {muted ? <MicOff className="h-6 w-6 text-red-400" /> : <Mic className="h-6 w-6 text-white" />}
-            </button>
-          )}
-          <button onClick={() => hangup(false)} className="h-14 w-14 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center shadow-[0_0_50px_rgba(239,68,68,0.6)] transition active:scale-95" aria-label="End call">
-            <PhoneOff className="h-8 w-8 text-white" />
-          </button>
-        </div>
-
-        <p className="mt-6 text-xs text-white/40 text-center max-w-xs">
-          {status === "connecting" ? "Ringing your AI coach... 🔔" : status === "connected" ? "Speak any time — even while coach is talking. They'll stop and listen." : status === "waiting-agent" ? "Your coach is joining... say hello! 👋" : ""}
-        </p>
-      </div>
-    </div>
-  );
-}
+          className={`h-40 w-40 rounded-full flex items-center justify-center text-white text-3xl font-bold mb-6 transition-all duration-300 ${
+            status === "connecting" ? "animate-pulse" : agentSpeaking ? "animate-pulse scale-110" : ""
+          }`}
+          style={{
+            background: "linear-gradient(135deg, #5B21B6, #9333EA)",
+            boxShadow:
+              status === "connecting"
+                ? "0 0 40px rgba(147
