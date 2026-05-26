@@ -263,13 +263,12 @@ export function CallScreen({
       const tryNextAssistant = async () => {
         if (cancelled) return;
 
-        if (assistantIndex >= ASSISTANTS.length) {
-          stopRinging();
-          setError("All coaching sessions are currently busy. Please try again in a few minutes.");
-          setStatus("ending");
-          return;
-        }
-
+if (assistantIndex >= ASSISTANTS.length) {
+  stopRinging();
+  setError("All coaching sessions are currently busy. Please try again in a few minutes.");
+  setStatus("ending");
+  return;
+}
         const { publicKey, assistantId } = ASSISTANTS[assistantIndex];
         assistantIndex++;
 
