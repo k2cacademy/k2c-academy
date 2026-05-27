@@ -11,6 +11,7 @@ import { Logo } from "@/components/site/Logo";
 import { Trophy, Gift, LogOut, Award, Sparkles, Cake } from "lucide-react";
 import { toast } from "sonner";
 import {
+  import { PlansPanel } from "@/components/portal/PlansPanel";
   getMyProfile,
   completeOnboarding,
   markFirstSale,
@@ -171,7 +172,14 @@ function PortalPage() {
           <BookEditorPanel />
         </div>
       </main>
-
+<PlansPanel
+  currentPlan={profile?.plan ?? "free"}
+  profile={{
+    full_name: profile?.full_name ?? "",
+    email: profile?.email ?? "",
+    whatsapp: profile?.whatsapp ?? "",
+  }}
+/>
       {needsOnboarding && (
         <OnboardingDialog
           defaultName={profile?.full_name ?? ""}
