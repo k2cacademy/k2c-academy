@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Navbar } from "@/components/site/Navbar";
+import { Notifications } from "@/components/site/Notifications";
 import { Hero } from "@/components/site/Hero";
 import { About } from "@/components/site/About";
 import { Programs } from "@/components/site/Programs";
@@ -20,6 +21,7 @@ function Index() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Navbar />
+      <Notifications />
       <main>
         <Hero />
         <About />
