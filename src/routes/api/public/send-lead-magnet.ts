@@ -1,66 +1,68 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 
 const RESEND_API_KEY = "re_cULx4BLu_LwMSWXukgGKy8nTzs4RrgEjX";
-
-async function loadPdfBase64(): Promise<string | null> {
-  const candidates = [
-    path.join(process.cwd(), "public", "5-things-you-already-know.pdf"),
-    path.join(process.cwd(), "dist", "public", "5-things-you-already-know.pdf"),
-  ];
-  for (const p of candidates) {
-    try {
-      const buf = await readFile(p);
-      return Buffer.from(buf).toString("base64");
-    } catch {
-      /* try next */
-    }
-  }
-  return null;
-}
+const PDF_URL = "https://k2c-academy.workers.dev/5-things-you-already-know.pdf";
 
 export const Route = createFileRoute("/api/public/send-lead-magnet")({
   server: {
     handlers: {
       POST: async ({ request }) => {
         try {
-          const { name, email } = (await request.json()) as { name?: string; email?: string };
-          if (!name || !email) {
-            return new Response(JSON.stringify({ error: "Name and email required" }), {
-              status: 400,
-              headers: { "Content-Type": "application/json" },
-            });
-          }
-
-          const pdfBase64 = await loadPdfBase64();
-          const safeName = String(name).replace(/[<>]/g, "");
-
-          const html = [
-            '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">',
-            '<h1 style="color: #FFD700; font-size: 24px;">Hey ' + safeName + '!</h1>',
-            '<p style="color: #cccccc; font-size: 16px; line-height: 1.6;">Your free PDF is attached below \u2014 the K2\u00C7 playbook our students use to make their first sale online.</p>',
-            '<p style="color: #cccccc; font-size: 16px; line-height: 1.6;">Read it. Apply it. Then come back and tell me about your first sale.</p>',
-            '<div style="background: #3D0066; padding: 20px; border-radius: 8px; margin: 24px 0;">',
-            '<p style="color: #FFD700; font-weight: bold; margin: 0 0 8px 0;">Ready to go further?</p>',
-            '<p style="color: #ffffff; margin: 0 0 16px 0;">Join the Zero to First Online Sale System.</p>',
-            '<a href="https://oniahemmanuel.systeme.io/da36229f" style="background: #FFD700; color: #000; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">Get Instant Access</a>',
-            '</div>',
-            '<p style="color: #888; font-size: 13px;">\u2014 Digital Nathy<br/>Founder, K2\u00C7 Academy</p>',
-            '</div>',
-          ].join("");
-
-          const body: Record<string, unknown> = {
-            from: "K2C Academy <onboarding@resend.dev>",
-            to: [email],
-            subject: "Here is your free PDF from K2C Academy",
-            html,
+          const { name, email } = (await request.json()) as {
+            name?: string;
+            email?: string;
           };
-          if (pdfBase64) {
-            body.attachments = [
-              { filename: "5-Things-You-Already-Know-K2C-Academy.pdf", content: pdfBase64 },
-            ];
+
+          if (!name || !email) {
+            return new Response(
+              JSON.stringify({ error: "Name and email required" }),
+              { status: 400, headers: { "Content-Type": "application/json" } }
+            );
           }
+
+          const safeName = String(name).replace(/[<>]/g, "");
+          const firstName = safeName.split(" ")[0];
+
+          const html = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
+              <h1 style="color: #FFD700; font-size: 22px; line-height: 1.4;">Your free K2Ç guide is here — plus one thing to know 🎁</h1>
+              <p style="color: #cccccc; font-size: 16px; line-height: 1.6;">Hey ${firstName}!</p>
+              <p style="color: #cccccc; font-size: 16px; line-height: 1.6;">
+                Your free guide — <strong style="color: #ffffff;">5 Things You Already Know That Can Earn You Money Online</strong> — is ready. Read it today. Pick one skill. That is your starting point.
+              </p>
+              <div style="text-align: center; margin: 28px 0;">
+                <a href="${PDF_URL}" style="background: #FFD700; color: #000000; padding: 16px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; display: inline-block;">
+                  📄 Download Your Free PDF
+                </a>
+              </div>
+              <p style="color: #cccccc; font-size: 15px; text-align: center;">
+                Prefer the raw link? <a href="${PDF_URL}" style="color: #FFD700; text-decoration: underline;">Click here to download</a>
+              </p>
+              <hr style="border: none; border-top: 1px solid #333; margin: 28px 0;" />
+              <p style="color: #cccccc; font-size: 16px; line-height: 1.6;">
+                But here is what the guide cannot do: it cannot show you <strong style="color: #ffffff;">HOW</strong> to turn that skill into your first sale. That is exactly what the <strong style="color: #ffffff;">Zero to First Online Sale System</strong> does.
+              </p>
+              <p style="color: #cccccc; font-size: 16px; line-height: 1.6;">
+                150+ Nigerian beginners have already used it to make their first legitimate online sale. Your turn starts here:
+              </p>
+              <div style="text-align: center; margin: 28px 0;">
+                <a href="https://oniahemmanuel.systeme.io/da36229f" style="background: #FFD700; color: #000000; padding: 16px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; display: inline-block;">
+                  GET INSTANT ACCESS — ₦9,997 🚀
+                </a>
+              </div>
+              <div style="background: #7C3AED; padding: 20px; border-radius: 8px; text-align: center; margin: 24px 0;">
+                <p style="color: #ffffff; margin: 0 0 14px 0; font-size: 15px;">Join our WhatsApp Channel for free daily tips from Digital Nathy:</p>
+                <a href="https://whatsapp.com/channel/0029VbBM3Ao9mrGjHvT3k72Y" style="background: #FFD700; color: #000000; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">
+                  Join WhatsApp Channel 📣
+                </a>
+              </div>
+              <p style="color: #FFD700; font-size: 17px; font-weight: bold; margin-top: 28px;">Stop Learning. Start Earning.</p>
+              <p style="color: #888888; font-size: 13px; margin-top: 8px;">— Digital Nathy, Nigeria's First Sale Coach 💜</p>
+              <p style="color: #555555; font-size: 12px; font-style: italic; margin-top: 16px;">
+                P.S. Every student who commits to the system makes their first sale. The only ones who don't are the ones who never start.
+              </p>
+            </div>
+          `;
 
           const resp = await fetch("https://api.resend.com/emails", {
             method: "POST",
@@ -68,16 +70,21 @@ export const Route = createFileRoute("/api/public/send-lead-magnet")({
               Authorization: "Bearer " + RESEND_API_KEY,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(body),
+            body: JSON.stringify({
+              from: "Digital Nathy <onboarding@resend.dev>",
+              to: [email],
+              subject: "Your free K2Ç guide is here — plus one thing to know 🎁",
+              html,
+            }),
           });
 
           if (!resp.ok) {
             const errText = await resp.text();
             console.error("Resend error:", resp.status, errText);
-            return new Response(JSON.stringify({ error: "Failed to send email", detail: errText }), {
-              status: 502,
-              headers: { "Content-Type": "application/json" },
-            });
+            return new Response(
+              JSON.stringify({ error: "Failed to send email", detail: errText }),
+              { status: 502, headers: { "Content-Type": "application/json" } }
+            );
           }
 
           return new Response(JSON.stringify({ success: true }), {
