@@ -1,7 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "tanstack-start-app",
+  "name": "k2c-academy",
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  "vars": {
+    "APP_URL": "https://k2c-academy.workers.dev",
+    "SITE_URL": "https://k2c-academy.workers.dev"
+  }
 }
