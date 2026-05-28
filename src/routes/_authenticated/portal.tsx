@@ -349,3 +349,5 @@ function OnboardingDialog({
         </form>
       </DialogContent>
     </Dialog>
+);
+}
