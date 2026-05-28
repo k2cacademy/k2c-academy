@@ -10,24 +10,25 @@ const inputSchema = z.object({
 export const sendLeadMagnet = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => inputSchema.parse(input))
   .handler(async ({ data }) => {
-    const RESEND_API_KEY = process.env.RESEND_API_KEY;
-    if (!RESEND_API_KEY) throw new Error("Resend not configured");
-
-    const APP_URL = process.env.APP_URL || process.env.SITE_URL || "https://k2cacademy.com";
+    const BREVO_API_KEY = "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";
+    const APP_URL = process.env.APP_URL || process.env.SITE_URL || "https://k2c-academy.workers.dev";
     const pdfUrl = `${APP_URL}/5-things-you-already-know.pdf`;
     const firstName = data.name.split(" ")[0];
 
-    const res = await fetch("https://api.resend.com/emails", {
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "api-key": BREVO_API_KEY,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Digital Nathy <onboarding@resend.dev>",
-        to: [data.email],
+        sender: {
+          name: "Digital Nathy",
+          email: "oniahemmanuel@gmail.com",
+        },
+        to: [{ email: data.email, name: data.name }],
         subject: "Your free K2Ç guide is here — plus one thing to know 🎁",
-        html: `
+        htmlContent: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#0a0a0a;color:#fff;padding:32px;border-radius:12px;">
             <h1 style="color:#FFD700;font-size:22px;line-height:1.4;">Your free K2Ç guide is here 🎁</h1>
             <p style="color:#ccc;font-size:16px;line-height:1.6;">Hey ${firstName}!</p>
@@ -74,6 +75,7 @@ export const sendLeadMagnet = createServerFn({ method: "POST" })
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      console.error("Brevo error:", res.status, body);
       throw new Error(`Email failed: ${res.status} ${body}`);
     }
 
