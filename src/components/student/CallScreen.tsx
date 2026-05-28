@@ -1,204 +1,475 @@
-// ── Main call logic with robust fallback ────────────────────────────────────
-useEffect(() => {
-  if (previousContext === null) return;
+import { useEffect, useRef, useState } from "react";
+import Vapi from "@vapi-ai/web";
+import { Phone, PhoneOff, Mic, MicOff, Loader2 } from "lucide-react";
 
-  cancelledRef.current = false;
-  assistantIndexRef.current = 0;
+const ASSISTANTS = [
+  {
+    publicKey: "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1",
+    assistantId: "a16cf991-f420-44f4-8460-0129939c9fe3",
+  },
+  {
+    publicKey: "e6bf041d-1c62-4b94-a93c-52b563eef22c",
+    assistantId: "5c3ce312-2f00-486c-8cd9-7da43417af4d",
+  },
+  {
+    publicKey: "2ef0603f-4704-4cf4-9be8-a581fc68b192",
+    assistantId: "d1fd7394-f3bc-4a1d-8181-a05a4978c572",
+  },
+  {
+    publicKey: "04b01653-b99c-4749-b012-be91aa031768",
+    assistantId: "e4d008ae-429f-4248-a503-33f30917b28e",
+  },
+];
 
-  let freeSecondsUsedLocal = 0;
-  let attemptId = 0;
+const FREE_TRIAL_SECONDS = 600;
+const INNER_CIRCLE_SECONDS = 99999;
 
-  const hardStop = () => {
-    try { vapiRef.current?.stop(); } catch {}
-    vapiRef.current = null;
-  };
+interface CallScreenProps {
+  session: string;
+  firstName: string;
+  isInnerCircle?: boolean;
+  topUpSeconds?: number;
+  previousContext?: string | null;
+  isReturning?: boolean;
+  onClose: () => void;
+}
 
-  const startTimerIfNeeded = () => {
-    if (startedTimerRef.current) return;
-    startedTimerRef.current = true;
+export function CallScreen({
+  session,
+  firstName,
+  isInnerCircle = false,
+  topUpSeconds = 0,
+  previousContext = null,
+  isReturning = false,
+  onClose,
+}: CallScreenProps) {
+  const [status, setStatus] = useState<
+    "idle" | "connecting" | "waiting-agent" | "connected" | "ending"
+  >("idle");
+  const [duration, setDuration] = useState(0);
+  const [agentSpeaking, setAgentSpeaking] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [timeWarning, setTimeWarning] = useState(false);
+  const [freeSecondsUsed, setFreeSecondsUsed] = useState(0);
+  const [blockedNoMinutes, setBlockedNoMinutes] = useState(false);
 
-    const remainingSeconds = isInnerCircle
-      ? INNER_CIRCLE_SECONDS
-      : FREE_TRIAL_SECONDS - freeSecondsUsedLocal + topUpSeconds;
+  const vapiRef = useRef<InstanceType<typeof Vapi> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cancelledRef = useRef(false);
+  const assistantIndexRef = useRef(0);
+  const startedTimerRef = useRef(false);
+  const durationRef = useRef(0);
+  const messagesRef = useRef<string[]>([]);
 
-    timerRef.current = setInterval(() => {
-      setDuration((d) => {
-        const next = d + 1;
-        if (next === remainingSeconds - 30) setTimeWarning(true);
-        if (next >= remainingSeconds) {
-          window.clearInterval(timerRef.current!);
-          hangup(true);
-          return remainingSeconds;
-        }
-        return next;
-      });
-    }, 1000);
-  };
-
-  const tryNext = async () => {
-    const myAttempt = ++attemptId;
-
-    if (cancelledRef.current) return;
-
-    if (assistantIndexRef.current >= ASSISTANTS.length) {
-      stopRinging();
-      setError("All coaching sessions are currently busy. Please try again in a few minutes.");
-      setStatus("ending");
-      return;
+  const checkUsage = async (): Promise<number> => {
+    try {
+      const key = `k2c_voice_${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+      return parseInt(localStorage.getItem(key) ?? "0", 10) || 0;
+    } catch {
+      return 0;
     }
+  };
 
-    const { publicKey, assistantId } = ASSISTANTS[assistantIndexRef.current];
-    const slotNumber = assistantIndexRef.current + 1;
-    assistantIndexRef.current++;
+  const saveUsage = (seconds: number) => {
+    try {
+      const key = `k2c_voice_${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+      const current = parseInt(localStorage.getItem(key) ?? "0", 10) || 0;
+      localStorage.setItem(key, String(current + seconds));
+    } catch { /* ignore */ }
+  };
 
-    setStatus("connecting");
-    setError(null);
-
-    console.log(`[VAPI] Attempt ${myAttempt}: trying ${slotNumber}/${ASSISTANTS.length}`, {
-      assistantId,
-      publicKey,
-    });
-
-    // ensure old instance is dead
-    hardStop();
-
-    // small backoff helps browser audio/mic settle
-    await new Promise((r) => setTimeout(r, 400));
-    if (cancelledRef.current || myAttempt !== attemptId) return;
-
-    const vapi = new Vapi(publicKey);
-    vapiRef.current = vapi;
-
-    let gotCallStart = false;
-
-    const connectTimeout = setTimeout(() => {
-      if (cancelledRef.current || myAttempt !== attemptId) return;
-      if (!gotCallStart) {
-        console.log(`[VAPI] Attempt ${myAttempt}: no call-start in time -> failover`);
-        hardStop();
-        tryNext();
+  const saveMemory = () => {
+    try {
+      if (messagesRef.current.length > 0) {
+        localStorage.setItem(
+          `k2c_memory_${session}`,
+          messagesRef.current.slice(-20).join("\n")
+        );
       }
-    }, 20000);
+    } catch { /* ignore */ }
+  };
 
-    const safe = (fn: () => void) => {
-      if (cancelledRef.current) return;
-      if (myAttempt !== attemptId) return; // ignore stale events
-      fn();
+  const stopRinging = () => {
+    try {
+      const audio = (window as unknown as { _k2cRingtone?: HTMLAudioElement })._k2cRingtone;
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    } catch { /* ignore */ }
+  };
+
+  const cleanup = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    startedTimerRef.current = false;
+  };
+
+  const hangup = (timeUp = false) => {
+    cancelledRef.current = true;
+    stopRinging();
+    try { vapiRef.current?.stop(); } catch { /* ignore */ }
+    vapiRef.current = null;
+    saveUsage(durationRef.current);
+    saveMemory();
+    cleanup();
+    if (timeUp) {
+      setStatus("ending");
+      setTimeout(() => onClose(), 2000);
+    } else {
+      onClose();
+    }
+  };
+
+  const toggleMute = () => {
+    if (vapiRef.current) {
+      vapiRef.current.setMuted(!muted);
+      setMuted(!muted);
+    }
+  };
+
+  // Start ringtone
+  useEffect(() => {
+    if (status === "connecting") {
+      try {
+        const audio = new Audio("/From Knowledge to Cash.mp3");
+        audio.loop = true;
+        audio.volume = 0.5;
+        audio.play().catch(() => { /* autoplay blocked */ });
+        (window as unknown as { _k2cRingtone?: HTMLAudioElement })._k2cRingtone = audio;
+      } catch { /* ignore */ }
+    }
+  }, [status]);
+
+  // Track duration
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
+
+  // Main call logic
+  useEffect(() => {
+    if (previousContext === null) return;
+
+    cancelledRef.current = false;
+    assistantIndexRef.current = 0;
+
+    let freeSecondsUsedLocal = 0;
+    let attemptId = 0;
+
+    const hardStop = () => {
+      try { vapiRef.current?.stop(); } catch { /* ignore */ }
+      vapiRef.current = null;
     };
 
-    vapi.on("call-start", () => safe(() => {
-      gotCallStart = true;
-      clearTimeout(connectTimeout);
-      stopRinging();
-      setStatus("waiting-agent");
-      console.log(`[VAPI] Attempt ${myAttempt}: call-start`);
-    }));
+    const startTimerIfNeeded = () => {
+      if (startedTimerRef.current) return;
+      startedTimerRef.current = true;
 
-    vapi.on("speech-start", () => safe(() => {
-      setAgentSpeaking(true);
-      setStatus("connected");
-      startTimerIfNeeded();
-      console.log(`[VAPI] Attempt ${myAttempt}: speech-start`);
-    }));
+      const remainingSeconds = isInnerCircle
+        ? INNER_CIRCLE_SECONDS
+        : FREE_TRIAL_SECONDS - freeSecondsUsedLocal + topUpSeconds;
 
-    vapi.on("speech-end", () => safe(() => {
-      setAgentSpeaking(false);
-    }));
+      timerRef.current = setInterval(() => {
+        setDuration((d) => {
+          const next = d + 1;
+          if (next === remainingSeconds - 30) setTimeWarning(true);
+          if (next >= remainingSeconds) {
+            window.clearInterval(timerRef.current!);
+            hangup(true);
+            return remainingSeconds;
+          }
+          return next;
+        });
+      }, 1000);
+    };
 
-    vapi.on("error", (err: any) => safe(() => {
-      console.log(`[VAPI] Attempt ${myAttempt}: error`, err);
-      clearTimeout(connectTimeout);
-      hardStop();
-      tryNext();
-    }));
+    const tryNext = async () => {
+      const myAttempt = ++attemptId;
+      if (cancelledRef.current) return;
 
-    vapi.on("call-end", () => safe(() => {
-      console.log(`[VAPI] Attempt ${myAttempt}: call-end`);
-      clearTimeout(connectTimeout);
-
-      // if it ended before ever starting, failover
-      if (!gotCallStart) {
-        hardStop();
-        tryNext();
-        return;
-      }
-
-      // normal end
-      stopRinging();
-      saveUsage(durationRef.current);
-      saveMemory();
-      cleanup();
-      onClose();
-    }));
-
-    vapi.on("message", (msg: any) => safe(() => {
-      if (msg?.type === "transcript" && msg?.transcript) {
-        messagesRef.current.push(`${msg.role}: ${msg.transcript}`);
-      }
-    }));
-
-    const memoryContext = previousContext
-      ? `IMPORTANT: This student has spoken with you before. ${previousContext}. Continue from where you left off.`
-      : `This is ${firstName}'s first session. Welcome them warmly and ask what skill they want to monetize.`;
-
-    try {
-      // IMPORTANT: for @vapi-ai/web ^2.5.2 use object signature
-      await vapi.start({
-        assistantId,
-        assistantOverrides: {
-          variableValues: {
-            studentKey: session,
-            name: firstName,
-            student_name: firstName,
-            memory_context: memoryContext,
-            is_returning: isReturning ? "yes" : "no",
-            plan: isInnerCircle ? "Inner Circle member" : "trial student",
-            minutes_available: String(
-              Math.floor(
-                (isInnerCircle
-                  ? INNER_CIRCLE_SECONDS
-                  : FREE_TRIAL_SECONDS - freeSecondsUsedLocal + topUpSeconds) / 60
-              )
-            ),
-          },
-        },
-        // If this is not a real Vapi Session (chat), remove it:
-        // sessionId: vapiSessionId || undefined,
-      });
-
-      console.log(`[VAPI] Attempt ${myAttempt}: start() resolved`);
-    } catch (e) {
-      console.log(`[VAPI] Attempt ${myAttempt}: start() threw`, e);
-      clearTimeout(connectTimeout);
-      hardStop();
-      tryNext();
-    }
-  };
-
-  const startCall = async () => {
-    if (!isInnerCircle) {
-      const secondsUsed = await checkUsage();
-      freeSecondsUsedLocal = secondsUsed;
-      setFreeSecondsUsed(secondsUsed);
-
-      const remainingSeconds = FREE_TRIAL_SECONDS - secondsUsed + topUpSeconds;
-      if (remainingSeconds <= 0) {
+      if (assistantIndexRef.current >= ASSISTANTS.length) {
         stopRinging();
-        setBlockedNoMinutes(true);
+        setError("All coaching sessions are currently busy. Please try again in a few minutes.");
         setStatus("ending");
         return;
       }
-    }
-    tryNext();
+
+      const { publicKey, assistantId } = ASSISTANTS[assistantIndexRef.current];
+      assistantIndexRef.current++;
+      setStatus("connecting");
+      setError(null);
+      hardStop();
+
+      await new Promise((r) => setTimeout(r, 400));
+      if (cancelledRef.current || myAttempt !== attemptId) return;
+
+      const vapi = new Vapi(publicKey);
+      vapiRef.current = vapi;
+      let gotCallStart = false;
+
+      const connectTimeout = setTimeout(() => {
+        if (cancelledRef.current || myAttempt !== attemptId) return;
+        if (!gotCallStart) {
+          hardStop();
+          tryNext();
+        }
+      }, 20000);
+
+      const safe = (fn: () => void) => {
+        if (cancelledRef.current) return;
+        if (myAttempt !== attemptId) return;
+        fn();
+      };
+
+      vapi.on("call-start", () => safe(() => {
+        gotCallStart = true;
+        clearTimeout(connectTimeout);
+        stopRinging();
+        setStatus("waiting-agent");
+      }));
+
+      vapi.on("speech-start", () => safe(() => {
+        setAgentSpeaking(true);
+        setStatus("connected");
+        startTimerIfNeeded();
+      }));
+
+      vapi.on("speech-end", () => safe(() => {
+        setAgentSpeaking(false);
+      }));
+
+      vapi.on("error", () => safe(() => {
+        clearTimeout(connectTimeout);
+        hardStop();
+        tryNext();
+      }));
+
+      vapi.on("call-end", () => safe(() => {
+        clearTimeout(connectTimeout);
+        if (!gotCallStart) {
+          hardStop();
+          tryNext();
+          return;
+        }
+        stopRinging();
+        saveUsage(durationRef.current);
+        saveMemory();
+        cleanup();
+        onClose();
+      }));
+
+      vapi.on("message", (msg: { type?: string; transcript?: string; role?: string }) => safe(() => {
+        if (msg?.type === "transcript" && msg?.transcript) {
+          messagesRef.current.push(`${msg.role}: ${msg.transcript}`);
+        }
+      }));
+
+      const memoryContext = previousContext
+        ? `IMPORTANT: This student has spoken with you before. ${previousContext}. Continue from where you left off.`
+        : `This is ${firstName}'s first session. Welcome them warmly and ask what skill they want to monetize.`;
+
+      try {
+        await vapi.start({
+          assistantId,
+          assistantOverrides: {
+            variableValues: {
+              studentKey: session,
+              name: firstName,
+              student_name: firstName,
+              memory_context: memoryContext,
+              is_returning: isReturning ? "yes" : "no",
+              plan: isInnerCircle ? "Inner Circle member" : "trial student",
+              minutes_available: String(
+                Math.floor(
+                  (isInnerCircle
+                    ? INNER_CIRCLE_SECONDS
+                    : FREE_TRIAL_SECONDS - freeSecondsUsedLocal + topUpSeconds) / 60
+                )
+              ),
+            },
+          },
+        });
+      } catch {
+        clearTimeout(connectTimeout);
+        hardStop();
+        tryNext();
+      }
+    };
+
+    const startCall = async () => {
+      if (!isInnerCircle) {
+        const secondsUsed = await checkUsage();
+        freeSecondsUsedLocal = secondsUsed;
+        setFreeSecondsUsed(secondsUsed);
+        const remainingSeconds = FREE_TRIAL_SECONDS - secondsUsed + topUpSeconds;
+        if (remainingSeconds <= 0) {
+          stopRinging();
+          setBlockedNoMinutes(true);
+          setStatus("ending");
+          return;
+        }
+      }
+      tryNext();
+    };
+
+    startCall();
+
+    return () => {
+      cancelledRef.current = true;
+      stopRinging();
+      hardStop();
+      cleanup();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previousContext]);
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
   };
 
-  startCall();
+  const remainingSeconds = isInnerCircle
+    ? INNER_CIRCLE_SECONDS - duration
+    : FREE_TRIAL_SECONDS - freeSecondsUsed - duration + topUpSeconds;
 
-  return () => {
-    cancelledRef.current = true;
-    stopRinging();
-    hardStop();
-    cleanup();
-  };
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, [previousContext]);
+  if (blockedNoMinutes) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[40vh] p-6 text-center">
+        <div className="text-4xl mb-4">⏳</div>
+        <h3 className="text-lg font-bold text-foreground">Monthly minutes used up</h3>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Your free minutes reset on the 1st of next month.
+        </p>
+        <a
+          href="https://wa.me/2349164266235"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-4 text-sm font-semibold text-accent hover:underline"
+        >
+          WhatsApp us to upgrade your plan →
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[50vh] p-6">
+      {/* Avatar */}
+      <div className={`relative h-24 w-24 rounded-full flex items-center justify-center border-2 transition-all duration-500 mb-6 ${
+        agentSpeaking
+          ? "border-primary shadow-glow scale-110 animate-pulse"
+          : status === "connected" || status === "waiting-agent"
+          ? "border-success"
+          : status === "connecting"
+          ? "border-yellow-500/60 animate-pulse"
+          : "border-border"
+      }`}>
+        <span className="text-4xl">🧠</span>
+        {(status === "connected" || status === "waiting-agent") && (
+          <span className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-green-500 border-2 border-background" />
+        )}
+        {status === "connecting" && (
+          <span className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-yellow-500 border-2 border-background flex items-center justify-center">
+            <Loader2 className="h-3 w-3 text-black animate-spin" />
+          </span>
+        )}
+      </div>
+
+      <h2 className="text-xl font-bold text-foreground">K2Ç AI Sales Coach</h2>
+      <p className="text-sm text-muted-foreground mt-1">Digital Nathy's AI Voice Coach</p>
+
+      {/* Status */}
+      <div className="mt-4 text-center">
+        {status === "connecting" && (
+          <p className="text-sm text-yellow-400">Connecting your coach…</p>
+        )}
+        {status === "waiting-agent" && (
+          <p className="text-sm text-muted-foreground">Coach is joining… say hello 👋</p>
+        )}
+        {status === "connected" && (
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-sm text-green-400">
+              {agentSpeaking ? "Coach is speaking…" : "Your coach is listening 👂"}
+            </p>
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {formatTime(duration)} elapsed
+            </p>
+            {timeWarning && (
+              <p className="text-xs text-destructive font-semibold">
+                Less than 30 seconds remaining!
+              </p>
+            )}
+            {!isInnerCircle && remainingSeconds > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {formatTime(remainingSeconds)} remaining this month
+              </p>
+            )}
+          </div>
+        )}
+        {status === "ending" && (
+          <p className="text-sm text-muted-foreground">Session ended. Great work! 🎉</p>
+        )}
+      </div>
+
+      {error && (
+        <div className="mt-4 px-4 py-2 bg-destructive/20 border border-destructive rounded-lg text-destructive text-sm text-center max-w-xs">
+          {error}
+        </div>
+      )}
+
+      {/* Controls */}
+      <div className="mt-8 flex items-center gap-6">
+        {(status === "connected" || status === "waiting-agent") && (
+          <button
+            onClick={toggleMute}
+            className="h-14 w-14 rounded-full border border-border bg-card flex items-center justify-center hover:bg-card/80 transition"
+            aria-label={muted ? "Unmute" : "Mute"}
+          >
+            {muted
+              ? <MicOff className="h-5 w-5 text-destructive" />
+              : <Mic className="h-5 w-5 text-foreground" />
+            }
+          </button>
+        )}
+
+        {status === "connecting" && (
+          <button disabled className="h-16 w-16 rounded-full bg-yellow-500/80 flex items-center justify-center">
+            <Loader2 className="h-7 w-7 text-white animate-spin" />
+          </button>
+        )}
+
+        {(status === "connected" || status === "waiting-agent" || status === "connecting") && (
+          <button
+            onClick={() => hangup(false)}
+            className="h-16 w-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition"
+            aria-label="End call"
+          >
+            <PhoneOff className="h-7 w-7 text-white" />
+          </button>
+        )}
+
+        {status === "idle" && (
+          <button
+            onClick={() => setStatus("connecting")}
+            className="h-16 w-16 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center shadow-lg transition"
+            aria-label="Start call"
+          >
+            <Phone className="h-7 w-7 text-white" />
+          </button>
+        )}
+      </div>
+
+      <p className="mt-6 text-xs text-muted-foreground text-center max-w-xs">
+        {status === "connecting" && "Routing to the best available coach…"}
+        {status === "waiting-agent" && "Speak to say hello — your coach is joining"}
+        {status === "connected" && agentSpeaking && "Listen carefully 👂"}
+        {status === "connected" && !agentSpeaking && "Speak clearly — your coach is ready 🎙️"}
+        {status === "ending" && "Tap the green button to start a new session"}
+      </p>
+    </div>
+  );
+}
