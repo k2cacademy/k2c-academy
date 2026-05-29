@@ -1,39 +1,33 @@
 import { useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
-import { verifyAccessCode } from "@/lib/student-portal.functions";
 import { Lock, Shield, Zap, ArrowLeft } from "lucide-react";
 import nathyPhoto from "@/assets/digital-nathy.jpg";
 
 const WHATSAPP = "https://wa.me/2349164266235";
 
-// Normalise code so both K2Ç-STUDENT and K2C-STUDENT work
-function normaliseCode(raw: string): string {
-  return raw.trim().toUpperCase().replace(/Ç/g, "C").replace(/ç/g, "C");
-}
-
 export function CodeGate({ onVerified }: { onVerified: (session: string) => void }) {
   const [code, setCode] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const verify = useServerFn(verifyAccessCode);
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setErr(null);
-    try {
-      const normalised = normaliseCode(code);
-      const res = await verify({ data: { code: normalised } });
-      if (!res.ok) {
-        setErr("Hmm, that code doesn't match. Check your purchase confirmation or WhatsApp us.");
-      } else {
-        onVerified(res.session);
-      }
-    } catch {
-      setErr("Something went wrong. Try again.");
-    } finally {
+
+    const normalised = code.trim().toUpperCase()
+      .replace(/Ç/g, "C")
+      .replace(/ç/g, "C");
+
+    const valid = ["K2C-STUDENT", "K2CACADEMY"].includes(normalised);
+
+    setTimeout(() => {
       setBusy(false);
-    }
+      if (valid) {
+        onVerified(normalised);
+      } else {
+        setErr("Hmm, that code doesn't match. Check your purchase confirmation or WhatsApp us.");
+      }
+    }, 800);
   };
 
   return (
@@ -110,7 +104,8 @@ export function CodeGate({ onVerified }: { onVerified: (session: string) => void
                   type="text"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  className="flex-1 bg-transparent outline-none text-white placeholder:text-transparent caret-purple-400 text-lg"
+                  placeholder="Enter your access code"
+                  className="flex-1 bg-transparent outline-none text-white placeholder:text-gray-600 caret-purple-400 text-lg"
                   autoComplete="off"
                   spellCheck={false}
                   aria-label="Access code"
@@ -136,10 +131,6 @@ export function CodeGate({ onVerified }: { onVerified: (session: string) => void
               <a href={WHATSAPP} target="_blank" rel="noreferrer" className="text-yellow-400 font-semibold hover:underline">
                 WhatsApp us.
               </a>
-            </p>
-
-            <p className="mt-3 text-center text-xs text-white/50">
-              Enter code: <span className="text-yellow-400 font-bold">K2C-STUDENT</span>
             </p>
           </div>
         </div>
