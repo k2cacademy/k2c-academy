@@ -64,19 +64,29 @@ export function ShareWinModal({
   }, [open]);
 
   const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setVerifyError(null);
-    setVerifying(true);
-    const { data, error } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "student_verification_code")
-      .maybeSingle();
+  e.preventDefault();
+  setVerifyError(null);
+  setVerifying(true);
+
+  // Normalise input
+  const normalised = code.trim().toUpperCase()
+    .replace(/Ç/g, "C")
+    .replace(/ç/g, "C");
+
+  // Accept both versions
+  const valid = ["K2C-STUDENT", "K2CACADEMY"].includes(normalised);
+
+  setTimeout(() => {
     setVerifying(false);
-    if (error) {
-      setVerifyError("Couldn't verify right now. Please try again in a moment.");
-      return;
+    if (valid) {
+      setStep("form");
+    } else {
+      setVerifyError(
+        "That code doesn't match. Only verified K2Ç students can share results here. Check your purchase confirmation."
+      );
     }
+  }, 800);
+};
     const configured = (data?.value || "").trim();
     const normalise = (s: string) =>
       s.trim().toUpperCase().replace(/Ç/g, "C").replace(/ç/g, "C");
