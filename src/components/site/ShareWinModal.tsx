@@ -187,11 +187,9 @@ export function ShareWinModal({
                   placeholder="Enter your student code"
                 />
               </div>
-
-              <p className="text-center text-xs text-muted-foreground">
-                Your code is{" "}
-                <span className="font-bold text-accent">K2C-STUDENT</span>
-              </p>
+<p className="mt-3 text-center text-xs text-white/50">
+  Enter code: <span className="text-yellow-400 font-bold">K2C-STUDENT</span>
+</p>
 
               {verifyError && (
                 <p className="rounded-lg bg-destructive/15 p-3 text-sm text-destructive">
