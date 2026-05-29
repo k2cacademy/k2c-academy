@@ -12,6 +12,11 @@ import { cn } from "@/lib/utils";
 
 type Step = "verify" | "form" | "success";
 
+// Normalise code so K2Ç-STUDENT and K2C-STUDENT both work
+function normaliseCode(raw: string): string {
+  return raw.trim().toUpperCase().replace(/Ç/g, "C").replace(/ç/g, "C");
+}
+
 export function ShareWinModal({
   open,
   onOpenChange,
@@ -24,7 +29,6 @@ export function ShareWinModal({
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
 
-  // form state
   const [fullName, setFullName] = useState("");
   const [whatTheySell, setWhatTheySell] = useState("");
   const [winStory, setWinStory] = useState("");
@@ -40,7 +44,6 @@ export function ShareWinModal({
 
   useEffect(() => {
     if (!open) {
-      // reset on close
       closeTimer.current && window.clearTimeout(closeTimer.current);
       setTimeout(() => {
         setStep("verify");
@@ -74,11 +77,15 @@ export function ShareWinModal({
       setVerifyError("Couldn't verify right now. Please try again in a moment.");
       return;
     }
-    // Always accept the canonical K2Ç-STUDENT code, plus any value
-    // an admin has configured in app_settings.
     const configured = (data?.value || "").trim();
-    const accepted = new Set(["K2Ç-STUDENT", configured].filter(Boolean));
-    if (accepted.has(code.trim())) {
+    const normalise = (s: string) =>
+      s.trim().toUpperCase().replace(/Ç/g, "C").replace(/ç/g, "C");
+    const accepted = new Set(
+      ["K2C-STUDENT", "K2Ç-STUDENT", configured]
+        .filter(Boolean)
+        .map(normalise)
+    );
+    if (accepted.has(normalise(code))) {
       setStep("form");
     } else {
       setVerifyError(
@@ -87,12 +94,12 @@ export function ShareWinModal({
     }
   };
 
-
   const onPickProfile = (file: File | null) => {
     setProfileFile(file);
     if (profilePreview) URL.revokeObjectURL(profilePreview);
     setProfilePreview(file ? URL.createObjectURL(file) : null);
   };
+
   const onPickProof = (file: File | null) => {
     setProofFile(file);
     if (proofPreview) URL.revokeObjectURL(proofPreview);
@@ -177,8 +184,14 @@ export function ShareWinModal({
                   onChange={(e) => setCode(e.target.value)}
                   className="h-12 border-border bg-background/60 pl-9 text-base"
                   aria-label="Student code"
+                  placeholder="Enter your student code"
                 />
               </div>
+
+              <p className="text-center text-xs text-muted-foreground">
+                Your code is{" "}
+                <span className="font-bold text-accent">K2C-STUDENT</span>
+              </p>
 
               {verifyError && (
                 <p className="rounded-lg bg-destructive/15 p-3 text-sm text-destructive">
