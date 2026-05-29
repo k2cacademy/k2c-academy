@@ -6,6 +6,11 @@ import nathyPhoto from "@/assets/digital-nathy.jpg";
 
 const WHATSAPP = "https://wa.me/2349164266235";
 
+// Normalise code so both K2Ç-STUDENT and K2C-STUDENT work
+function normaliseCode(raw: string): string {
+  return raw.trim().toUpperCase().replace(/Ç/g, "C").replace(/ç/g, "C");
+}
+
 export function CodeGate({ onVerified }: { onVerified: (session: string) => void }) {
   const [code, setCode] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -17,7 +22,8 @@ export function CodeGate({ onVerified }: { onVerified: (session: string) => void
     setBusy(true);
     setErr(null);
     try {
-      const res = await verify({ data: { code } });
+      const normalised = normaliseCode(code);
+      const res = await verify({ data: { code: normalised } });
       if (!res.ok) {
         setErr("Hmm, that code doesn't match. Check your purchase confirmation or WhatsApp us.");
       } else {
@@ -130,6 +136,10 @@ export function CodeGate({ onVerified }: { onVerified: (session: string) => void
               <a href={WHATSAPP} target="_blank" rel="noreferrer" className="text-yellow-400 font-semibold hover:underline">
                 WhatsApp us.
               </a>
+            </p>
+
+            <p className="mt-3 text-center text-xs text-white/50">
+              Enter code: <span className="text-yellow-400 font-bold">K2C-STUDENT</span>
             </p>
           </div>
         </div>
