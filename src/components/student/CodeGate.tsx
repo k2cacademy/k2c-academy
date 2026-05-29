@@ -4,6 +4,18 @@ import nathyPhoto from "@/assets/digital-nathy.jpg";
 
 const WHATSAPP = "https://wa.me/2349164266235";
 
+function getOrCreateSession(): string {
+  try {
+    const existing = localStorage.getItem("k2c_session");
+    if (existing) return existing;
+    const session = `k2c_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem("k2c_session", session);
+    return session;
+  } catch {
+    return `k2c_${Date.now()}`;
+  }
+}
+
 export function CodeGate({ onVerified }: { onVerified: (session: string) => void }) {
   const [code, setCode] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -23,7 +35,8 @@ export function CodeGate({ onVerified }: { onVerified: (session: string) => void
     setTimeout(() => {
       setBusy(false);
       if (valid) {
-        onVerified(normalised);
+        const session = getOrCreateSession();
+        onVerified(session);
       } else {
         setErr("Hmm, that code doesn't match. Check your purchase confirmation or WhatsApp us.");
       }
