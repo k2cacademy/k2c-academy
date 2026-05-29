@@ -17,9 +17,8 @@ export const askNathy = createServerFn({ method: "POST" })
     const FRIENDLY_FALLBACK =
       "Let me connect you with our team! 💛 WhatsApp us at 09164266235 — we'll get back to you personally right away.";
 
-    // Try Groq first (fast, dedicated), fall back to Lovable AI Gateway.
     const groqKey = process.env.GROQ_API_KEY;
-    const lovableKey = process.env.LOVABLE_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY;
 
     const callGroq = async () => {
       if (!groqKey) return null;
@@ -47,33 +46,42 @@ export const askNathy = createServerFn({ method: "POST" })
       return json?.choices?.[0]?.message?.content?.trim() || null;
     };
 
-    const callLovable = async () => {
-      if (!lovableKey) return null;
-      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${lovableKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            { role: "system", content: ASK_NATHY_SYSTEM_PROMPT },
-            ...data.messages,
-          ],
-        }),
-      });
+    const callGemini = async () => {
+      if (!geminiKey) return null;
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: {
+              parts: [{ text: ASK_NATHY_SYSTEM_PROMPT }],
+            },
+            contents: data.messages.map((m) => ({
+              role: m.role === "assistant" ? "model" : "user",
+              parts: [{ text: m.content }],
+            })),
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 800,
+            },
+          }),
+        }
+      );
       if (!res.ok) {
-        console.error("Lovable AI error", res.status, await res.text().catch(() => ""));
+        console.error("Gemini error", res.status, await res.text().catch(() => ""));
         return null;
       }
       const json = await res.json();
-      return json?.choices?.[0]?.message?.content?.trim() || null;
+      return json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
     };
 
     try {
-      const reply = (await callGroq()) ?? (await callLovable());
-      return { reply: reply ?? FRIENDLY_FALLBACK, error: reply ? null : ("fallback" as const) };
+      const reply = (await callGroq()) ?? (await callGemini());
+      return {
+        reply: reply ?? FRIENDLY_FALLBACK,
+        error: reply ? null : ("fallback" as const),
+      };
     } catch (err) {
       console.error("Ask Nathy error", err);
       return { reply: FRIENDLY_FALLBACK, error: "exception" as const };
