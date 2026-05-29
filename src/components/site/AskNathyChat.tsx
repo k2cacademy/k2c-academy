@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, Send, Loader2 } from "lucide-react";
-import { useServerFn } from "@tanstack/react-start";
+import { Send, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { askNathy } from "@/lib/ask-nathy.functions";
 import { cn } from "@/lib/utils";
 import { VoiceInput } from "@/components/student/VoiceInput";
 import { SpeakerButton } from "@/components/student/SpeakerButton";
@@ -17,6 +15,9 @@ const GREETING: Msg = {
     "Hey! I'm the K2Ç AI Assistant — Digital Nathy's official AI here on the website. I'm here 24/7 to answer any question about K2Ç Academy. What's on your mind? 🔥",
 };
 
+const FRIENDLY_FALLBACK =
+  "Let me connect you with our team! 💛 WhatsApp us at 09164266235 — we'll get back to you personally right away.";
+
 export function AskNathyChat({
   open,
   onOpenChange,
@@ -27,7 +28,6 @@ export function AskNathyChat({
   const [messages, setMessages] = useState<Msg[]>([GREETING]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const askNathyFn = useServerFn(askNathy);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,15 +38,26 @@ export function AskNathyChat({
 
   const sendText = async (text: string, isVoice = false) => {
     if (!text || loading) return;
-    const next = [...messages, { role: "user" as const, content: text }];
+    const next: Msg[] = [...messages, { role: "user", content: text }];
     setMessages(next);
     setInput("");
     setLoading(true);
     try {
-      const res = await askNathyFn({ data: { messages: next } });
-      setMessages((prev) => [...prev, { role: "assistant", content: res.reply }]);
+      const res = await fetch("/api/ask-nathy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: next }),
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json() as { reply: string; error: string | null };
+      const reply = data.reply ?? FRIENDLY_FALLBACK;
+
+      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+
       if (isVoice && typeof window !== "undefined" && "speechSynthesis" in window) {
-        const u = new SpeechSynthesisUtterance(res.reply);
+        const u = new SpeechSynthesisUtterance(reply);
         u.rate = 0.95;
         u.lang = navigator.language || "en-US";
         window.speechSynthesis.cancel();
@@ -56,11 +67,7 @@ export function AskNathyChat({
       console.error(err);
       setMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          content:
-            "Let me connect you with our team! 💛 WhatsApp us at 09164266235 — we'll get back to you personally right away.",
-        },
+        { role: "assistant", content: FRIENDLY_FALLBACK },
       ]);
     } finally {
       setLoading(false);
