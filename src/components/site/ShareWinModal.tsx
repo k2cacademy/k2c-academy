@@ -12,11 +12,6 @@ import { cn } from "@/lib/utils";
 
 type Step = "verify" | "form" | "success";
 
-// Normalise code so K2Ç-STUDENT and K2C-STUDENT both work
-function normaliseCode(raw: string): string {
-  return raw.trim().toUpperCase().replace(/Ç/g, "C").replace(/ç/g, "C");
-}
-
 export function ShareWinModal({
   open,
   onOpenChange,
@@ -28,7 +23,6 @@ export function ShareWinModal({
   const [code, setCode] = useState("");
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
-
   const [fullName, setFullName] = useState("");
   const [whatTheySell, setWhatTheySell] = useState("");
   const [winStory, setWinStory] = useState("");
@@ -63,45 +57,27 @@ export function ShareWinModal({
     }
   }, [open]);
 
-  const handleVerify = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setVerifyError(null);
-  setVerifying(true);
+  const handleVerify = (e: React.FormEvent) => {
+    e.preventDefault();
+    setVerifyError(null);
+    setVerifying(true);
 
-  // Normalise input
-  const normalised = code.trim().toUpperCase()
-    .replace(/Ç/g, "C")
-    .replace(/ç/g, "C");
+    const normalised = code.trim().toUpperCase()
+      .replace(/Ç/g, "C")
+      .replace(/ç/g, "C");
 
-  // Accept both versions
-  const valid = ["K2C-STUDENT", "K2CACADEMY"].includes(normalised);
+    const valid = ["K2C-STUDENT", "K2CACADEMY"].includes(normalised);
 
-  setTimeout(() => {
-    setVerifying(false);
-    if (valid) {
-      setStep("form");
-    } else {
-      setVerifyError(
-        "That code doesn't match. Only verified K2Ç students can share results here. Check your purchase confirmation."
-      );
-    }
-  }, 800);
-};
-    const configured = (data?.value || "").trim();
-    const normalise = (s: string) =>
-      s.trim().toUpperCase().replace(/Ç/g, "C").replace(/ç/g, "C");
-    const accepted = new Set(
-      ["K2C-STUDENT", "K2Ç-STUDENT", configured]
-        .filter(Boolean)
-        .map(normalise)
-    );
-    if (accepted.has(normalise(code))) {
-      setStep("form");
-    } else {
-      setVerifyError(
-        "That code doesn't match. Only verified K2Ç students can share results here. Check your purchase confirmation.",
-      );
-    }
+    setTimeout(() => {
+      setVerifying(false);
+      if (valid) {
+        setStep("form");
+      } else {
+        setVerifyError(
+          "That code doesn't match. Only verified K2Ç students can share results here. Check your purchase confirmation."
+        );
+      }
+    }, 800);
   };
 
   const onPickProfile = (file: File | null) => {
@@ -197,9 +173,6 @@ export function ShareWinModal({
                   placeholder="Enter your student code"
                 />
               </div>
-<p className="mt-3 text-center text-xs text-white/50">
-  Enter code: <span className="text-yellow-400 font-bold">K2C-STUDENT</span>
-</p>
 
               {verifyError && (
                 <p className="rounded-lg bg-destructive/15 p-3 text-sm text-destructive">
