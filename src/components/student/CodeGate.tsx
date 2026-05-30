@@ -1,46 +1,31 @@
 import { useState } from "react";
 import { Lock, Shield, Zap, ArrowLeft } from "lucide-react";
+import { verifyAccessCode } from "@/lib/student-portal.functions";
 import nathyPhoto from "@/assets/digital-nathy.jpg";
 
 const WHATSAPP = "https://wa.me/2349164266235";
-
-function getOrCreateSession(): string {
-  try {
-    const existing = localStorage.getItem("k2c_session");
-    if (existing) return existing;
-    const session = `k2c_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem("k2c_session", session);
-    return session;
-  } catch {
-    return `k2c_${Date.now()}`;
-  }
-}
 
 export function CodeGate({ onVerified }: { onVerified: (session: string) => void }) {
   const [code, setCode] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setErr(null);
-
-    const normalised = code.trim().toUpperCase()
-      .replace(/Ç/g, "C")
-      .replace(/ç/g, "C");
-
-    const valid = ["K2C-STUDENT", "K2CACADEMY"].includes(normalised);
-
-    setTimeout(() => {
-      setBusy(false);
-      if (valid) {
-        const session = getOrCreateSession();
-        onVerified(session);
-      } else {
+    try {
+      const result = await verifyAccessCode(code.trim());
+      if (!result.ok || !result.session) {
         setErr("Hmm, that code doesn't match. Check your purchase confirmation or WhatsApp us.");
+        return;
       }
-    }, 800);
+      onVerified(result.session);
+    } catch {
+      setErr("Something went wrong. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -63,8 +48,7 @@ export function CodeGate({ onVerified }: { onVerified: (session: string) => void
           <div
             className="rounded-[30px] p-8 md:p-10 backdrop-blur-xl"
             style={{
-              background:
-                "linear-gradient(135deg, rgba(91,33,182,0.85) 0%, rgba(147,51,234,0.85) 100%)",
+              background: "linear-gradient(135deg, rgba(91,33,182,0.85) 0%, rgba(147,51,234,0.85) 100%)",
             }}
           >
             <div className="flex justify-center -mt-20 mb-6">
