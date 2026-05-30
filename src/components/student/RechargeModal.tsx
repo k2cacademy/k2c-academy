@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { initRecharge } from "@/lib/student-portal.functions";
-import { X, Tag } from "lucide-react";
+import { X } from "lucide-react";
 
 const PACKS: { amount: 100 | 300 | 500; mins: number }[] = [
   { amount: 100, mins: 5 },
@@ -10,25 +9,18 @@ const PACKS: { amount: 100 | 300 | 500; mins: number }[] = [
 ];
 
 export function RechargeModal({
-  session,
-  open,
-  onClose,
-  reason,
+  session, open, onClose, reason,
 }: {
-  session: string;
-  open: boolean;
-  onClose: () => void;
-  reason?: "no-minutes" | "session-end";
+  session: string; open: boolean; onClose: () => void; reason?: "no-minutes" | "session-end";
 }) {
   const [busy, setBusy] = useState<number | null>(null);
-  const recharge = useServerFn(initRecharge);
 
   if (!open) return null;
 
   const buy = async (amount: 100 | 300 | 500) => {
     setBusy(amount);
     try {
-      const { checkoutUrl } = await recharge({ data: { session, amount_ngn: amount } });
+      const { checkoutUrl } = await initRecharge({ session, amount_ngn: amount });
       window.location.href = checkoutUrl;
     } catch (e) {
       alert(e instanceof Error ? e.message : "Could not start payment");
@@ -39,49 +31,25 @@ export function RechargeModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/70 backdrop-blur-sm">
-      <div
-        className="relative w-full max-w-md rounded-3xl p-7"
-        style={{
-          background: "linear-gradient(135deg, #1a0a2e 0%, #2d1b4e 100%)",
-          border: "1px solid rgba(147,51,234,0.5)",
-          boxShadow: "0 0 60px rgba(147,51,234,0.4)",
-        }}
-      >
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-white/60 hover:text-white"
-        >
+      <div className="relative w-full max-w-md rounded-3xl p-7" style={{ background: "linear-gradient(135deg, #1a0a2e 0%, #2d1b4e 100%)", border: "1px solid rgba(147,51,234,0.5)", boxShadow: "0 0 60px rgba(147,51,234,0.4)" }}>
+        <button onClick={onClose} className="absolute top-4 right-4 text-white/60 hover:text-white">
           <X className="h-5 w-5" />
         </button>
-
         <h3 className="text-xl font-bold text-white">
-          {reason === "session-end"
-            ? "Great session! Need more time?"
-            : "Your free minutes are used up 🎙️"}
+          {reason === "session-end" ? "Great session! Need more time?" : "Your free minutes are used up 🎙️"}
         </h3>
         <p className="mt-1.5 text-sm text-white/70">Top up to keep coaching:</p>
-
         <div className="mt-5 space-y-3">
           {PACKS.map((p) => (
-            <button
-              key={p.amount}
-              onClick={() => buy(p.amount)}
-              disabled={busy !== null}
-              className="w-full py-3.5 rounded-xl text-white font-semibold flex items-center justify-between px-5 transition"
-              style={{
-                background: "linear-gradient(135deg, #7C3AED 0%, #9333EA 100%)",
-                boxShadow: "0 0 20px rgba(147,51,234,0.4)",
-              }}
-            >
+            <button key={p.amount} onClick={() => buy(p.amount)} disabled={busy !== null}
+              className="w-full py-3.5 rounded-xl text-white font-semibold flex items-center justify-between px-5 transition disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #7C3AED 0%, #9333EA 100%)", boxShadow: "0 0 20px rgba(147,51,234,0.4)" }}>
               <span>₦{p.amount}</span>
-              <span>{p.mins} minutes</span>
+              <span>{busy === p.amount ? "Loading…" : `${p.mins} minutes`}</span>
             </button>
           ))}
         </div>
-
-        <p className="mt-4 text-xs text-white/60 text-center">
-          Or wait until tomorrow for your 10 free minutes to reset.
-        </p>
+        <p className="mt-4 text-xs text-white/60 text-center">Or wait until tomorrow for your free minutes to reset.</p>
       </div>
     </div>
   );
