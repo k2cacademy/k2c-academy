@@ -43,8 +43,11 @@ export const sendCoachMessage = (data: { session: string; message: string; voice
 export const synthesizeCoachVoice = (data: { session: string; text: string }) =>
   post<{ fallback: boolean; audio_b64?: string; mime?: string }>("synthesize-voice", data);
 
+export const initRecharge = (data: { session: string; amount_ngn: number }) =>
+  post<{ checkoutUrl: string; finalAmount: number }>("init-recharge", data);
+
 export const getBookEditorState = (session: string) =>
   post<{ isInnerCircle: boolean; editsUsed: number; editsRemaining: number | null; modes: { id: string; label: string }[] }>("book-editor-state", { session });
 
 export const runBookEditor = (data: { session: string; mode: string; text: string }) =>
-  post<{ edited: string; modeLabel: string; isInnerCircle: boolean; editsUsed: number; editsRemaining: number | null }>("run-book-editor", data);
+  post<{ edited: string; isInnerCircle: boolean; editsUsed: number; editsRemaining: number | null }>("run-book-editor", data);
