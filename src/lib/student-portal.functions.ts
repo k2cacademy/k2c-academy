@@ -1,8 +1,6 @@
-// All server functions replaced with direct fetch calls to /api/public/student-portal
-
 const BASE = "/api/public/student-portal";
 
-async function post<T>(action: string, data: Record<string, unknown>): Promise<T> {
+async function post<T>(action: string, data: Record<string, unknown> = {}): Promise<T> {
   const res = await fetch(BASE, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -15,25 +13,38 @@ async function post<T>(action: string, data: Record<string, unknown>): Promise<T
   return json;
 }
 
+export type Profile = {
+  first_name: string | null; full_name: string | null; email: string | null;
+  whatsapp: string | null; birthday_md: string | null; network: string | null;
+  onboarding_complete: boolean; trial_start: string | null; trial_end: string | null;
+  inner_circle_status: string | null;
+};
+
 export const verifyAccessCode = (code: string) =>
   post<{ ok: boolean; session?: string }>("verify-code", { code });
 
 export const getProfile = (session: string) =>
-  post<{ 
-    first_name: string | null; full_name: string | null; email: string | null;
-    whatsapp: string | null; birthday_md: string | null; network: string | null;
-    onboarding_complete: boolean; trial_start: string | null; trial_end: string | null;
-    inner_circle_status: string | null;
-  } | null>("get-profile", { session });
+  post<Profile | null>("get-profile", { session });
 
 export const completeOnboarding = (data: {
   session: string; first_name: string; email: string;
   whatsapp: string; birthday_md: string; network: string;
 }) => post<{ ok: boolean }>("complete-onboarding", data);
 
-export const sendCoachMessage = (data: {
-  session: string; message: string; voice?: boolean;
-}) => post<{ reply: string }>("send-coach-message", data);
+export const getChatHistory = (session: string) =>
+  post<{ id: string; role: string; content: string; created_at: string }[]>("get-chat-history", { session });
+
+export const getMinutesState = (session: string) =>
+  post<{ free_remaining: number; purchased: number; total_remaining: number }>("get-minutes-state", { session });
+
+export const sendCoachMessage = (data: { session: string; message: string; voice?: boolean }) =>
+  post<{ reply: string }>("send-coach-message", data);
 
 export const synthesizeCoachVoice = (data: { session: string; text: string }) =>
   post<{ fallback: boolean; audio_b64?: string; mime?: string }>("synthesize-voice", data);
+
+export const getBookEditorState = (session: string) =>
+  post<{ isInnerCircle: boolean; editsUsed: number; editsRemaining: number | null; modes: { id: string; label: string }[] }>("book-editor-state", { session });
+
+export const runBookEditor = (data: { session: string; mode: string; text: string }) =>
+  post<{ edited: string; modeLabel: string; isInnerCircle: boolean; editsUsed: number; editsRemaining: number | null }>("run-book-editor", data);
