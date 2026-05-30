@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { getProfile } from "@/lib/student-portal.functions";
 import { CodeGate } from "@/components/student/CodeGate";
 import { Onboarding } from "@/components/student/Onboarding";
@@ -34,21 +33,14 @@ export const Route = createFileRoute("/student-portal")({
 });
 
 type Profile = {
-  first_name: string | null;
-  full_name: string | null;
-  email: string | null;
-  whatsapp: string | null;
-  birthday_md: string | null;
-  network: string | null;
-  onboarding_complete: boolean;
-  trial_start: string | null;
-  trial_end: string | null;
+  first_name: string | null; full_name: string | null; email: string | null;
+  whatsapp: string | null; birthday_md: string | null; network: string | null;
+  onboarding_complete: boolean; trial_start: string | null; trial_end: string | null;
   inner_circle_status: string | null;
 };
 
 function AdminPanel() {
   const [tab, setTab] = useState("dashboard");
-
   const tabs = [
     { id: "dashboard", label: "Dashboard", icon: BarChart3 },
     { id: "students", label: "Students", icon: Users },
@@ -71,23 +63,18 @@ function AdminPanel() {
           </div>
         </div>
         <a href="/student-portal" className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-sm">
-          <LogOut className="h-4 w-4" />
-          Exit
+          <LogOut className="h-4 w-4" /> Exit
         </a>
       </div>
 
       <div className="border-b border-border bg-card overflow-x-auto">
         <div className="flex min-w-max">
           {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
+            <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
                 tab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <t.icon className="h-4 w-4" />
-              {t.label}
+              }`}>
+              <t.icon className="h-4 w-4" /> {t.label}
             </button>
           ))}
         </div>
@@ -123,15 +110,13 @@ function AdminPanel() {
                 ].map(link => (
                   <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer"
                     className="flex items-center justify-between p-3 rounded-lg bg-background hover:bg-primary/10 transition text-sm text-foreground">
-                    {link.label}
-                    <span className="text-primary">→</span>
+                    {link.label} <span className="text-primary">→</span>
                   </a>
                 ))}
               </div>
             </div>
           </div>
         )}
-
         {tab === "students" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-foreground">Students</h2>
@@ -141,7 +126,6 @@ function AdminPanel() {
             </div>
           </div>
         )}
-
         {tab === "calls" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-foreground">Voice Calls</h2>
@@ -151,7 +135,6 @@ function AdminPanel() {
             </div>
           </div>
         )}
-
         {tab === "ambassadors" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-foreground">Ambassadors</h2>
@@ -172,7 +155,6 @@ function AdminPanel() {
             </div>
           </div>
         )}
-
         {tab === "birthdays" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-foreground">Birthday Log</h2>
@@ -182,7 +164,6 @@ function AdminPanel() {
             </div>
           </div>
         )}
-
         {tab === "settings" && (
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-foreground">Settings</h2>
@@ -213,12 +194,10 @@ function StudentPortalPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const fetchProfile = useServerFn(getProfile);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Check for admin access
     const params = new URLSearchParams(window.location.search);
     const adminKey = params.get("admin");
     if (adminKey === ADMIN_PASSWORD) {
@@ -231,7 +210,7 @@ function StudentPortalPage() {
     const s = localStorage.getItem(SESSION_KEY);
     if (verified === "true" && s) {
       setSession(s);
-      fetchProfile({ data: { session: s } })
+      getProfile(s)
         .then((p) => setProfile(p as Profile | null))
         .catch(() => {
           localStorage.removeItem(VERIFIED_KEY);
@@ -242,7 +221,7 @@ function StudentPortalPage() {
     } else {
       setLoading(false);
     }
-  }, [fetchProfile]);
+  }, []);
 
   if (loading) {
     return (
@@ -252,9 +231,7 @@ function StudentPortalPage() {
     );
   }
 
-  if (isAdmin) {
-    return <AdminPanel />;
-  }
+  if (isAdmin) return <AdminPanel />;
 
   if (!session) {
     return (
@@ -263,7 +240,7 @@ function StudentPortalPage() {
           localStorage.setItem(VERIFIED_KEY, "true");
           localStorage.setItem(SESSION_KEY, s);
           setSession(s);
-          fetchProfile({ data: { session: s } }).then((p) => setProfile(p as Profile | null));
+          getProfile(s).then((p) => setProfile(p as Profile | null));
         }}
       />
     );
@@ -273,10 +250,10 @@ function StudentPortalPage() {
     return (
       <Onboarding
         session={session}
-        onDone={() => fetchProfile({ data: { session } }).then((p) => setProfile(p as Profile | null))}
+        onDone={() => getProfile(session).then((p) => setProfile(p as Profile | null))}
       />
     );
   }
 
   return <CoachChat session={session} profile={profile} />;
-                  }
+}
