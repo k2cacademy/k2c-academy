@@ -11,6 +11,7 @@ import { VoiceInput } from "./VoiceInput";
 import { CallScreen } from "./CallScreen";
 import { RechargeModal } from "./RechargeModal";
 import { BookEditorSheet } from "./BookEditorSheet";
+import { StudentDashboard } from "./StudentDashboard";
 
 const DAILY_TIPS = [
   "Follow up with every prospect. The money is in the follow up!",
