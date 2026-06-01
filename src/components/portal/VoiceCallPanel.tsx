@@ -325,7 +325,8 @@ export function VoiceCallPanel({ email }: { email: string }) {
         localParticipant: { setMicrophoneEnabled: (v: boolean) => Promise<void> };
       };
 
-      r.on(LivekitClient.RoomEvent.TrackSubscribed, (track: { kind: string; attach: () => HTMLAudioElement }) => {
+      r.on(LivekitClient.RoomEvent.TrackSubscribed, (...args: unknown[]) => {
+        const track = args[0] as { kind: string; attach: () => HTMLAudioElement };
         if (track.kind === "audio") {
           setAgentSpeaking(true);
           const el = track.attach();
@@ -334,7 +335,8 @@ export function VoiceCallPanel({ email }: { email: string }) {
           document.body.appendChild(el);
         }
       });
-      r.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track: { kind: string }) => {
+      r.on(LivekitClient.RoomEvent.TrackUnsubscribed, (...args: unknown[]) => {
+        const track = args[0] as { kind: string };
         if (track.kind === "audio") setAgentSpeaking(false);
       });
       r.on(LivekitClient.RoomEvent.Disconnected, () => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
+// useServerFn removed — student-portal.functions.ts is a thin fetch client
 import { BookOpen, X, Upload, Download, Sparkles, Loader2 } from "lucide-react";
 import { getBookEditorState, runBookEditor } from "@/lib/student-portal.functions";
 
@@ -20,8 +20,8 @@ export function BookEditorSheet({
   session: string;
   onClose: () => void;
 }) {
-  const fetchState = useServerFn(getBookEditorState);
-  const runEdit = useServerFn(runBookEditor);
+  const fetchState = getBookEditorState;
+  const runEdit = runBookEditor;
 
   const [state, setState] = useState<State | null>(null);
   const [mode, setMode] = useState("professional-polish");
@@ -32,7 +32,7 @@ export function BookEditorSheet({
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetchState({ data: { session } })
+    fetchState(session)
       .then((s) => setState(s as State))
       .catch((e: Error) => setError(e.message));
   }, [fetchState, session]);
@@ -65,7 +65,7 @@ export function BookEditorSheet({
     setError(null);
     setLoading(true);
     try {
-      const res = await runEdit({ data: { session, mode, text } });
+      const res = await runEdit({ session, mode, text });
       setResult(res.edited);
       setState((s) =>
         s

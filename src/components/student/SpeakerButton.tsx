@@ -64,7 +64,7 @@ export function SpeakerButton({ text, session }: { text: string; session?: strin
     };
     try {
       setState("loading");
-      const result = await ttsFn({ data: { session, text } });
+      const result = await ttsFn({ session, text });
       if (result.fallback || !("audio_b64" in result) || !result.audio_b64) {
         browserFallback();
         return;
