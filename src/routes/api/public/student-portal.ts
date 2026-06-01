@@ -101,21 +101,22 @@ export const Route = createFileRoute("/api/public/student-portal")({
             const userId = verifySession(body.session as string);
             const { data: profile, error: dbErr } = await supabaseAdmin
               .from("student_profiles")
-              .select("free_minutes_remaining, purchased_minutes, daily_free_minutes_reset_date, inner_circle_status")
+              .select("daily_free_minutes_used, daily_free_minutes_reset_date, purchased_minutes_balance, inner_circle_status")
               .eq("user_id", userId).maybeSingle();
             if (dbErr) throw new Error(dbErr.message);
             const today = new Date().toISOString().slice(0, 10);
             const isInner = profile?.inner_circle_status === "active";
             const dailyFree = isInner ? 10 : 3;
+            let usedToday = profile?.daily_free_minutes_used ?? 0;
             if (profile?.daily_free_minutes_reset_date !== today) {
+              usedToday = 0;
               await supabaseAdmin.from("student_profiles").update({
-                free_minutes_remaining: dailyFree,
+                daily_free_minutes_used: 0,
                 daily_free_minutes_reset_date: today,
               }).eq("user_id", userId);
-              return ok({ free_remaining: dailyFree, purchased: profile?.purchased_minutes ?? 0, total_remaining: dailyFree + (profile?.purchased_minutes ?? 0) });
             }
-            const free = profile?.free_minutes_remaining ?? 0;
-            const purchased = profile?.purchased_minutes ?? 0;
+            const free = Math.max(0, dailyFree - usedToday);
+            const purchased = profile?.purchased_minutes_balance ?? 0;
             return ok({ free_remaining: free, purchased, total_remaining: free + purchased });
           }
 
