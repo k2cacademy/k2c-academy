@@ -16,6 +16,29 @@ function verifySession(token: string): string {
   return userId;
 }
 
+async function bumpStreakForUser(userId: string): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: row } = await supabaseAdmin
+    .from("streaks")
+    .select("current_streak, longest_streak, last_active")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!row) {
+    await supabaseAdmin.from("streaks").insert({
+      user_id: userId, current_streak: 1, longest_streak: 1, last_active: today,
+    });
+    return;
+  }
+  if (row.last_active === today) return;
+
+  const yesterday = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
+  const next = row.last_active === yesterday ? (row.current_streak ?? 0) + 1 : 1;
+  const longest = Math.max(row.longest_streak ?? 0, next);
+  await supabaseAdmin.from("streaks").update({
+    current_streak: next, longest_streak: longest, last_active: today,
+  }).eq("user_id", userId);
+
 const ok = (data: unknown) => new Response(JSON.stringify(data), {
   status: 200, headers: { "Content-Type": "application/json" },
 });
