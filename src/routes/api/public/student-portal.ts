@@ -38,6 +38,9 @@ async function bumpStreakForUser(userId: string): Promise<void> {
   await supabaseAdmin.from("streaks").update({
     current_streak: next, longest_streak: longest, last_active: today,
   }).eq("user_id", userId);
+}
+
+
 
 const ok = (data: unknown) => new Response(JSON.stringify(data), {
   status: 200, headers: { "Content-Type": "application/json" },
