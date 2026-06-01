@@ -18,8 +18,10 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedPortalRouteImport } from './routes/_authenticated/portal'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as ApiPublicStudentPortalRouteImport } from './routes/api/public/student-portal'
 import { Route as ApiPublicSendLeadMagnetRouteImport } from './routes/api/public/send-lead-magnet'
 import { Route as ApiPublicMonnifyWebhookRouteImport } from './routes/api/public/monnify-webhook'
+import { Route as ApiPublicAskNathyRouteImport } from './routes/api/public/ask-nathy'
 import { Route as ApiPublicHooksTelegramWebhookRouteImport } from './routes/api/public/hooks/telegram-webhook'
 import { Route as ApiPublicHooksSystemeioWebhookRouteImport } from './routes/api/public/hooks/systemeio-webhook'
 import { Route as ApiPublicHooksMonthlyNewsletterRouteImport } from './routes/api/public/hooks/monthly-newsletter'
@@ -73,6 +75,11 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const ApiPublicStudentPortalRoute = ApiPublicStudentPortalRouteImport.update({
+  id: '/api/public/student-portal',
+  path: '/api/public/student-portal',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicSendLeadMagnetRoute = ApiPublicSendLeadMagnetRouteImport.update({
   id: '/api/public/send-lead-magnet',
   path: '/api/public/send-lead-magnet',
@@ -81,6 +88,11 @@ const ApiPublicSendLeadMagnetRoute = ApiPublicSendLeadMagnetRouteImport.update({
 const ApiPublicMonnifyWebhookRoute = ApiPublicMonnifyWebhookRouteImport.update({
   id: '/api/public/monnify-webhook',
   path: '/api/public/monnify-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicAskNathyRoute = ApiPublicAskNathyRouteImport.update({
+  id: '/api/public/ask-nathy',
+  path: '/api/public/ask-nathy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicHooksTelegramWebhookRoute =
@@ -140,8 +152,10 @@ export interface FileRoutesByFullPath {
   '/verify-payment': typeof VerifyPaymentRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/portal': typeof AuthenticatedPortalRoute
+  '/api/public/ask-nathy': typeof ApiPublicAskNathyRoute
   '/api/public/monnify-webhook': typeof ApiPublicMonnifyWebhookRoute
   '/api/public/send-lead-magnet': typeof ApiPublicSendLeadMagnetRoute
+  '/api/public/student-portal': typeof ApiPublicStudentPortalRoute
   '/api/public/hooks/birthday-gifts': typeof ApiPublicHooksBirthdayGiftsRoute
   '/api/public/hooks/budget-summary': typeof ApiPublicHooksBudgetSummaryRoute
   '/api/public/hooks/keep-alive': typeof ApiPublicHooksKeepAliveRoute
@@ -160,8 +174,10 @@ export interface FileRoutesByTo {
   '/verify-payment': typeof VerifyPaymentRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/portal': typeof AuthenticatedPortalRoute
+  '/api/public/ask-nathy': typeof ApiPublicAskNathyRoute
   '/api/public/monnify-webhook': typeof ApiPublicMonnifyWebhookRoute
   '/api/public/send-lead-magnet': typeof ApiPublicSendLeadMagnetRoute
+  '/api/public/student-portal': typeof ApiPublicStudentPortalRoute
   '/api/public/hooks/birthday-gifts': typeof ApiPublicHooksBirthdayGiftsRoute
   '/api/public/hooks/budget-summary': typeof ApiPublicHooksBudgetSummaryRoute
   '/api/public/hooks/keep-alive': typeof ApiPublicHooksKeepAliveRoute
@@ -182,8 +198,10 @@ export interface FileRoutesById {
   '/verify-payment': typeof VerifyPaymentRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/portal': typeof AuthenticatedPortalRoute
+  '/api/public/ask-nathy': typeof ApiPublicAskNathyRoute
   '/api/public/monnify-webhook': typeof ApiPublicMonnifyWebhookRoute
   '/api/public/send-lead-magnet': typeof ApiPublicSendLeadMagnetRoute
+  '/api/public/student-portal': typeof ApiPublicStudentPortalRoute
   '/api/public/hooks/birthday-gifts': typeof ApiPublicHooksBirthdayGiftsRoute
   '/api/public/hooks/budget-summary': typeof ApiPublicHooksBudgetSummaryRoute
   '/api/public/hooks/keep-alive': typeof ApiPublicHooksKeepAliveRoute
@@ -204,8 +222,10 @@ export interface FileRouteTypes {
     | '/verify-payment'
     | '/admin'
     | '/portal'
+    | '/api/public/ask-nathy'
     | '/api/public/monnify-webhook'
     | '/api/public/send-lead-magnet'
+    | '/api/public/student-portal'
     | '/api/public/hooks/birthday-gifts'
     | '/api/public/hooks/budget-summary'
     | '/api/public/hooks/keep-alive'
@@ -224,8 +244,10 @@ export interface FileRouteTypes {
     | '/verify-payment'
     | '/admin'
     | '/portal'
+    | '/api/public/ask-nathy'
     | '/api/public/monnify-webhook'
     | '/api/public/send-lead-magnet'
+    | '/api/public/student-portal'
     | '/api/public/hooks/birthday-gifts'
     | '/api/public/hooks/budget-summary'
     | '/api/public/hooks/keep-alive'
@@ -245,8 +267,10 @@ export interface FileRouteTypes {
     | '/verify-payment'
     | '/_authenticated/admin'
     | '/_authenticated/portal'
+    | '/api/public/ask-nathy'
     | '/api/public/monnify-webhook'
     | '/api/public/send-lead-magnet'
+    | '/api/public/student-portal'
     | '/api/public/hooks/birthday-gifts'
     | '/api/public/hooks/budget-summary'
     | '/api/public/hooks/keep-alive'
@@ -265,8 +289,10 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   StudentPortalRoute: typeof StudentPortalRoute
   VerifyPaymentRoute: typeof VerifyPaymentRoute
+  ApiPublicAskNathyRoute: typeof ApiPublicAskNathyRoute
   ApiPublicMonnifyWebhookRoute: typeof ApiPublicMonnifyWebhookRoute
   ApiPublicSendLeadMagnetRoute: typeof ApiPublicSendLeadMagnetRoute
+  ApiPublicStudentPortalRoute: typeof ApiPublicStudentPortalRoute
   ApiPublicHooksBirthdayGiftsRoute: typeof ApiPublicHooksBirthdayGiftsRoute
   ApiPublicHooksBudgetSummaryRoute: typeof ApiPublicHooksBudgetSummaryRoute
   ApiPublicHooksKeepAliveRoute: typeof ApiPublicHooksKeepAliveRoute
@@ -342,6 +368,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/api/public/student-portal': {
+      id: '/api/public/student-portal'
+      path: '/api/public/student-portal'
+      fullPath: '/api/public/student-portal'
+      preLoaderRoute: typeof ApiPublicStudentPortalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/send-lead-magnet': {
       id: '/api/public/send-lead-magnet'
       path: '/api/public/send-lead-magnet'
@@ -354,6 +387,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/monnify-webhook'
       fullPath: '/api/public/monnify-webhook'
       preLoaderRoute: typeof ApiPublicMonnifyWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/ask-nathy': {
+      id: '/api/public/ask-nathy'
+      path: '/api/public/ask-nathy'
+      fullPath: '/api/public/ask-nathy'
+      preLoaderRoute: typeof ApiPublicAskNathyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/telegram-webhook': {
@@ -437,8 +477,10 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   StudentPortalRoute: StudentPortalRoute,
   VerifyPaymentRoute: VerifyPaymentRoute,
+  ApiPublicAskNathyRoute: ApiPublicAskNathyRoute,
   ApiPublicMonnifyWebhookRoute: ApiPublicMonnifyWebhookRoute,
   ApiPublicSendLeadMagnetRoute: ApiPublicSendLeadMagnetRoute,
+  ApiPublicStudentPortalRoute: ApiPublicStudentPortalRoute,
   ApiPublicHooksBirthdayGiftsRoute: ApiPublicHooksBirthdayGiftsRoute,
   ApiPublicHooksBudgetSummaryRoute: ApiPublicHooksBudgetSummaryRoute,
   ApiPublicHooksKeepAliveRoute: ApiPublicHooksKeepAliveRoute,
