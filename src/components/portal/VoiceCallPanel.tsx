@@ -6,7 +6,8 @@
  *   2. VAPI Fallback A
  *   3. VAPI Fallback B
  *   4. VAPI Fallback C
- *   5. LiveKit Agent (Railway) — final unbreakable fallback
+ *   5. VAPI Fallback D
+ *   6. LiveKit Agent (Railway) — final unbreakable fallback
  *
  * Features:
  *  - Custom ringtone: /From Knowledge to Cash.mp3
@@ -45,8 +46,12 @@ const VAPI_CHAIN = [
     publicKey: "04b01653-b99c-4749-b012-be91aa031768",
     assistantId: "e4d008ae-429f-4248-a503-33f30917b28e",
   },
+  {
+    label: "Fallback D",
+    publicKey: "146217bf-5d74-4870-acfd-6bad277f66eb",
+    assistantId: "d6f52dbc-eb9b-422e-8815-27bf261ef0a9",
+  },
 ] as const;
-
 // ─── Monthly minutes helpers ───────────────────────────────────────────────
 
 function getMonthKey() {
