@@ -11,6 +11,7 @@ import { VoiceInput } from "./VoiceInput";
 import { CallScreen } from "./CallScreen";
 import { RechargeModal } from "./RechargeModal";
 import { BookEditorSheet } from "./BookEditorSheet";
+import { StudentDashboard } from "./StudentDashboard";
 
 const DAILY_TIPS = [
   "Follow up with every prospect. The money is in the follow up!",
@@ -157,6 +158,8 @@ export function CoachChat({ session, profile }: { session: string; profile: Prof
                 </div>
               )}
             </div>
+            <StudentDashboard session={session} />
+
 
             <main ref={scrollRef} className="relative flex-1 overflow-y-auto mx-auto max-w-3xl w-full px-4 py-5 space-y-3">
               {messages.map(m => (
@@ -261,7 +264,7 @@ export function CoachChat({ session, profile }: { session: string; profile: Prof
                   <p className="text-xs text-white/60">{isInnerCircle ? "✨ Unlimited edits — Inner Circle" : "3 free edits — upgrade for unlimited"}</p>
                 </div>
               </div>
-              <BookEditorSheet session={session} onClose={() => {}} inline />
+              <BookEditorSheet session={session} onClose={() => {}} />
             </div>
           </div>
         )}
@@ -340,8 +343,8 @@ export function CoachChat({ session, profile }: { session: string; profile: Prof
         <CallScreen session={session} firstName={firstName} onClose={() => {
           setCallOpen(false);
           void getMinutesState(session).then(m => setMinutes({ free_remaining: m.free_remaining, purchased: m.purchased }));
-        }} onNoMinutes={() => { setCallOpen(false); setRechargeReason("session-end"); setRechargeOpen(true); }}
-          isInnerCircle={isInnerCircle} purchasedMinutes={minutes?.purchased ?? 0} />
+        }}
+          isInnerCircle={isInnerCircle} />
       )}
 
       <RechargeModal session={session} open={rechargeOpen} onClose={() => setRechargeOpen(false)} reason={rechargeReason} />

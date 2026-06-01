@@ -223,7 +223,7 @@ function AdminPanel() {
 async function fetchProfile(session: string): Promise<Profile | null> {
   try {
     const { getProfile } = await import("@/lib/student-portal.functions");
-    const result = await getProfile({ data: { session } });
+    const result = await getProfile(session);
     return result as Profile | null;
   } catch (e) {
     console.error("fetchProfile error", e);

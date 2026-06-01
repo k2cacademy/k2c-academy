@@ -68,24 +68,24 @@ export function Notifications() {
     } catch { /* ignore */ }
 
     // Fetch notifications
-    supabase
+    (supabase as unknown as { from: (t: string) => { select: (s: string) => { eq: (k: string, v: unknown) => { order: (k: string, o: object) => { limit: (n: number) => Promise<{ data: Notification[] | null }> } } } } })
       .from("notifications")
       .select("*")
       .eq("is_active", true)
       .order("created_at", { ascending: false })
       .limit(20)
       .then(({ data }) => {
-        if (data) setNotifications(data as Notification[]);
+        if (data) setNotifications(data);
       });
 
     // Subscribe to new notifications in real time
     const channel = supabase
       .channel("notifications_realtime")
       .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications" },
-        (payload) => {
-          setNotifications((prev) => [payload.new as Notification, ...prev]);
+        "postgres_changes" as never,
+        { event: "INSERT", schema: "public", table: "notifications" } as never,
+        (payload: { new: Notification }) => {
+          setNotifications((prev) => [payload.new, ...prev]);
         }
       )
       .subscribe();

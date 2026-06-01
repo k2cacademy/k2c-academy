@@ -272,24 +272,21 @@ export function CallScreen({
         : `This is ${firstName}'s first session. Welcome them warmly and ask what skill they want to monetize.`;
 
       try {
-        await vapi.start({
-          assistantId,
-          assistantOverrides: {
-            variableValues: {
-              studentKey: session,
-              name: firstName,
-              student_name: firstName,
-              memory_context: memoryContext,
-              is_returning: isReturning ? "yes" : "no",
-              plan: isInnerCircle ? "Inner Circle member" : "trial student",
-              minutes_available: String(
-                Math.floor(
-                  (isInnerCircle
-                    ? INNER_CIRCLE_SECONDS
-                    : FREE_TRIAL_SECONDS - freeSecondsUsedLocal + topUpSeconds) / 60
-                )
-              ),
-            },
+        await vapi.start(assistantId, {
+          variableValues: {
+            studentKey: session,
+            name: firstName,
+            student_name: firstName,
+            memory_context: memoryContext,
+            is_returning: isReturning ? "yes" : "no",
+            plan: isInnerCircle ? "Inner Circle member" : "trial student",
+            minutes_available: String(
+              Math.floor(
+                (isInnerCircle
+                  ? INNER_CIRCLE_SECONDS
+                  : FREE_TRIAL_SECONDS - freeSecondsUsedLocal + topUpSeconds) / 60
+              )
+            ),
           },
         });
       } catch {

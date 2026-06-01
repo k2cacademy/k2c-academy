@@ -51,3 +51,27 @@ export const getBookEditorState = (session: string) =>
 
 export const runBookEditor = (data: { session: string; mode: string; text: string }) =>
   post<{ edited: string; isInnerCircle: boolean; editsUsed: number; editsRemaining: number | null }>("run-book-editor", data);
+
+export type DashboardData = {
+  first_name: string;
+  is_inner_circle: boolean;
+  day_n: number;
+  days_left: number | null;
+  trial_expiring_soon: boolean;
+  minutes_free_remaining: number;
+  minutes_purchased: number;
+  streak_current: number;
+  streak_longest: number;
+  streak_active_today: boolean;
+  modules_completed: number;
+  modules_total: number;
+  last_action_step: string | null;
+  last_session_at: string | null;
+};
+
+export const getDashboard = (session: string) =>
+  post<DashboardData>("get-dashboard", { session });
+
+export const bumpStreak = (session: string) =>
+  post<{ current: number; longest: number }>("bump-streak", { session });
+
