@@ -171,6 +171,7 @@ export const Route = createFileRoute("/api/public/student-portal")({
             await supabaseAdmin.from("student_chat_messages").insert({
               user_id: userId, role: "assistant", content: reply,
             });
+            await bumpStreakForUser(userId);
             return ok({ reply });
           }
 
