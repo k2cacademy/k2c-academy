@@ -157,6 +157,8 @@ export function CoachChat({ session, profile }: { session: string; profile: Prof
                 </div>
               )}
             </div>
+            <StudentDashboard session={session} />
+
 
             <main ref={scrollRef} className="relative flex-1 overflow-y-auto mx-auto max-w-3xl w-full px-4 py-5 space-y-3">
               {messages.map(m => (
