@@ -340,6 +340,68 @@ export const Route = createFileRoute("/api/public/student-portal")({
             });
           }
 
+          // ── get-dashboard ────────────────────────────────────────
+          if (action === "get-dashboard") {
+            const userId = verifySession(body.session as string);
+            const today = new Date().toISOString().slice(0, 10);
+
+            const [{ data: profile }, { data: streak }, { data: lastSession }, { data: moduleEvents }] = await Promise.all([
+              supabaseAdmin.from("student_profiles")
+                .select("first_name, full_name, email, trial_start, trial_end, inner_circle_status, daily_free_minutes_used, daily_free_minutes_reset_date, purchased_minutes_balance")
+                .eq("user_id", userId).maybeSingle(),
+              supabaseAdmin.from("streaks")
+                .select("current_streak, longest_streak, last_active")
+                .eq("user_id", userId).maybeSingle(),
+              supabaseAdmin.from("coach_sessions")
+                .select("action_step, summary, created_at")
+                .eq("user_id", userId)
+                .not("action_step", "is", null)
+                .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+              supabaseAdmin.from("student_events")
+                .select("module_name")
+                .eq("user_id", userId).eq("event_type", "module_complete"),
+            ]);
+
+            const isInner = profile?.inner_circle_status === "active";
+            const dailyFree = isInner ? 10 : 3;
+            const usedToday = profile?.daily_free_minutes_reset_date === today ? (profile?.daily_free_minutes_used ?? 0) : 0;
+            const minutesFree = Math.max(0, dailyFree - usedToday);
+            const purchased = profile?.purchased_minutes_balance ?? 0;
+
+            const trialStart = profile?.trial_start ? new Date(profile.trial_start) : null;
+            const trialEnd = profile?.trial_end ? new Date(profile.trial_end) : null;
+            const dayN = trialStart ? Math.max(1, Math.floor((Date.now() - trialStart.getTime()) / 86400_000) + 1) : 1;
+            const daysLeft = trialEnd ? Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400_000)) : null;
+
+            const completedModules = new Set((moduleEvents ?? []).map((e) => e.module_name).filter(Boolean)).size;
+
+            return ok({
+              first_name: profile?.first_name ?? profile?.full_name?.split(" ")[0] ?? "Student",
+              is_inner_circle: isInner,
+              day_n: dayN,
+              days_left: daysLeft,
+              trial_expiring_soon: daysLeft !== null && daysLeft <= 2 && !isInner,
+              minutes_free_remaining: minutesFree,
+              minutes_purchased: purchased,
+              streak_current: streak?.current_streak ?? 0,
+              streak_longest: streak?.longest_streak ?? 0,
+              streak_active_today: streak?.last_active === today,
+              modules_completed: completedModules,
+              modules_total: 6,
+              last_action_step: lastSession?.action_step ?? null,
+              last_session_at: lastSession?.created_at ?? null,
+            });
+          }
+
+          // ── bump-streak ──────────────────────────────────────────
+          if (action === "bump-streak") {
+            const userId = verifySession(body.session as string);
+            await bumpStreakForUser(userId);
+            const { data: s } = await supabaseAdmin
+              .from("streaks").select("current_streak, longest_streak").eq("user_id", userId).maybeSingle();
+            return ok({ current: s?.current_streak ?? 1, longest: s?.longest_streak ?? 1 });
+          }
+
           return err("Unknown action", 400);
 
         } catch (e) {
