@@ -408,9 +408,9 @@ export const Route = createFileRoute("/api/public/student-portal")({
             const userId = verifySession(body.session as string);
             const today = new Date().toISOString().slice(0, 10);
 
-            const [{ data: profile }, { data: streak }, { data: lastSession }, { data: moduleEvents }] = await Promise.all([
+            const [{ data: profile }, { data: streak }, { data: lastSession }, { data: milestones }] = await Promise.all([
               supabaseAdmin.from("student_profiles")
-                .select("first_name, full_name, email, trial_start, trial_end, inner_circle_status, daily_free_minutes_used, daily_free_minutes_reset_date, purchased_minutes_balance")
+                .select("first_name, full_name, email, trial_start, trial_end, inner_circle_status, monthly_minutes_used, monthly_minutes_reset_date, purchased_minutes_balance, subscription_plan, stage")
                 .eq("user_id", userId).maybeSingle(),
               supabaseAdmin.from("streaks")
                 .select("current_streak, longest_streak, last_active")
@@ -420,15 +420,15 @@ export const Route = createFileRoute("/api/public/student-portal")({
                 .eq("user_id", userId)
                 .not("action_step", "is", null)
                 .order("created_at", { ascending: false }).limit(1).maybeSingle(),
-              supabaseAdmin.from("student_events")
-                .select("module_name")
-                .eq("user_id", userId).eq("event_type", "module_complete"),
+              supabaseAdmin.from("progress_tracker")
+                .select("milestone, completed").eq("user_id", userId),
             ]);
 
-            const isInner = profile?.inner_circle_status === "active";
-            const dailyFree = isInner ? 10 : 3;
-            const usedToday = profile?.daily_free_minutes_reset_date === today ? (profile?.daily_free_minutes_used ?? 0) : 0;
-            const minutesFree = Math.max(0, dailyFree - usedToday);
+            const resetTo0 = await ensureMonthlyMinutesReset(userId, profile?.monthly_minutes_reset_date ?? null);
+            const used = resetTo0 !== null ? 0 : (profile?.monthly_minutes_used ?? 0);
+            const plan = (profile?.subscription_plan ?? "free") as Plan;
+            const cap = PLAN_MONTHLY_MINUTES[plan] ?? PLAN_MONTHLY_MINUTES.free;
+            const minutesFree = Math.max(0, cap - used);
             const purchased = profile?.purchased_minutes_balance ?? 0;
 
             const trialStart = profile?.trial_start ? new Date(profile.trial_start) : null;
@@ -436,21 +436,33 @@ export const Route = createFileRoute("/api/public/student-portal")({
             const dayN = trialStart ? Math.max(1, Math.floor((Date.now() - trialStart.getTime()) / 86400_000) + 1) : 1;
             const daysLeft = trialEnd ? Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400_000)) : null;
 
-            const completedModules = new Set((moduleEvents ?? []).map((e) => e.module_name).filter(Boolean)).size;
+            const completedSet = new Set((milestones ?? []).filter((m) => m.completed).map((m) => m.milestone));
+            const completedCount = completedSet.size;
+            const firstSaleMade = completedSet.has("First Sale Made");
+            const computedStage = computeStageFromMilestones(completedCount, firstSaleMade);
+            const stage = (profile?.stage as typeof STAGE_ORDER[number]) ?? computedStage;
+            // keep stage in sync if it advanced
+            if (computedStage !== stage && STAGE_ORDER.indexOf(computedStage) > STAGE_ORDER.indexOf(stage)) {
+              await supabaseAdmin.from("student_profiles").update({ stage: computedStage }).eq("user_id", userId);
+            }
 
             return ok({
               first_name: profile?.first_name ?? profile?.full_name?.split(" ")[0] ?? "Student",
-              is_inner_circle: isInner,
+              plan,
+              is_inner_circle: plan !== "free",
+              stage: STAGE_ORDER.indexOf(computedStage) > STAGE_ORDER.indexOf(stage) ? computedStage : stage,
               day_n: dayN,
               days_left: daysLeft,
-              trial_expiring_soon: daysLeft !== null && daysLeft <= 2 && !isInner,
+              trial_expiring_soon: daysLeft !== null && daysLeft <= 2 && plan === "free",
               minutes_free_remaining: minutesFree,
               minutes_purchased: purchased,
+              monthly_cap: cap,
+              monthly_used: used,
               streak_current: streak?.current_streak ?? 0,
               streak_longest: streak?.longest_streak ?? 0,
               streak_active_today: streak?.last_active === today,
-              modules_completed: completedModules,
-              modules_total: 6,
+              modules_completed: completedCount,
+              modules_total: MILESTONES.length,
               last_action_step: lastSession?.action_step ?? null,
               last_session_at: lastSession?.created_at ?? null,
             });
@@ -463,6 +475,91 @@ export const Route = createFileRoute("/api/public/student-portal")({
             const { data: s } = await supabaseAdmin
               .from("streaks").select("current_streak, longest_streak").eq("user_id", userId).maybeSingle();
             return ok({ current: s?.current_streak ?? 1, longest: s?.longest_streak ?? 1 });
+          }
+
+          // ── get-milestones ──────────────────────────────────────
+          if (action === "get-milestones") {
+            const userId = verifySession(body.session as string);
+            const { data } = await supabaseAdmin
+              .from("progress_tracker").select("milestone, completed, completed_at").eq("user_id", userId);
+            const map = new Map((data ?? []).map((r) => [r.milestone, r]));
+            return ok({
+              milestones: MILESTONES.map((m) => ({
+                milestone: m,
+                completed: map.get(m)?.completed ?? false,
+                completed_at: map.get(m)?.completed_at ?? null,
+              })),
+            });
+          }
+
+          // ── update-milestone ────────────────────────────────────
+          if (action === "update-milestone") {
+            const userId = verifySession(body.session as string);
+            const milestone = String(body.milestone ?? "");
+            const completed = body.completed === true;
+            if (!MILESTONES.includes(milestone)) throw new Error("Invalid milestone");
+
+            const { data: existing } = await supabaseAdmin
+              .from("progress_tracker").select("id").eq("user_id", userId).eq("milestone", milestone).maybeSingle();
+            const completedAt = completed ? new Date().toISOString() : null;
+            if (existing) {
+              await supabaseAdmin.from("progress_tracker")
+                .update({ completed, completed_at: completedAt }).eq("id", existing.id);
+            } else {
+              await supabaseAdmin.from("progress_tracker").insert({
+                user_id: userId, milestone, completed, completed_at: completedAt,
+              });
+            }
+            return ok({ ok: true });
+          }
+
+          // ── flutterwave-init ────────────────────────────────────
+          // Returns the public key + amount so the client launches FlutterwaveCheckout inline.
+          if (action === "flutterwave-init") {
+            const userId = verifySession(body.session as string);
+            const plan = String(body.plan ?? "") as Plan;
+            const PRICES: Record<Plan, number> = { free: 0, inner_circle: 1000, premium: 1500 };
+            const amount = PRICES[plan];
+            if (!amount) throw new Error("Invalid plan");
+            const { data: p } = await supabaseAdmin.from("student_profiles")
+              .select("first_name, email, whatsapp").eq("user_id", userId).maybeSingle();
+            const tx_ref = `K2C-PLAN-${plan}-${userId.slice(0, 8)}-${Date.now()}`;
+            return ok({
+              publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY ?? "FLWPUBK-8c54aa491f6c0411b2e9b158189a7072-X",
+              amount, currency: "NGN", tx_ref, plan,
+              customer: {
+                email: p?.email ?? "student@k2c.academy",
+                name: p?.first_name ?? "K2Ç Student",
+                phone_number: p?.whatsapp ?? "",
+              },
+              meta: { user_id: userId, plan },
+            });
+          }
+
+          // ── flutterwave-verify ──────────────────────────────────
+          if (action === "flutterwave-verify") {
+            const userId = verifySession(body.session as string);
+            const txId = String(body.transaction_id ?? "");
+            const plan = String(body.plan ?? "") as Plan;
+            const secret = process.env.FLUTTERWAVE_SECRET_KEY;
+            if (!secret) throw new Error("Flutterwave not configured");
+            if (!txId) throw new Error("Missing transaction_id");
+            const r = await fetch(`https://api.flutterwave.com/v3/transactions/${encodeURIComponent(txId)}/verify`, {
+              headers: { Authorization: `Bearer ${secret}` },
+            });
+            const j = await r.json() as { status?: string; data?: { status?: string; amount?: number } };
+            if (j?.status !== "success" || j?.data?.status !== "successful") {
+              return err("Payment not verified", 400);
+            }
+            // Activate plan
+            const monthAhead = new Date(Date.now() + 30 * 86400_000).toISOString();
+            await supabaseAdmin.from("student_profiles").update({
+              subscription_plan: plan,
+              inner_circle_status: plan === "free" ? "none" : "active",
+              inner_circle_start: new Date().toISOString(),
+              inner_circle_expiry: monthAhead,
+            }).eq("user_id", userId);
+            return ok({ ok: true, plan });
           }
 
           return err("Unknown action", 400);
