@@ -62,7 +62,6 @@ export const getBookEditorState = (session: string) =>
 export const runBookEditor = (data: { session: string; mode: string; text: string }) =>
   post<{ edited: string; isInnerCircle: boolean; editsUsed: number; editsRemaining: number | null }>("run-book-editor", data);
 
-export type Plan = "free" | "inner_circle" | "premium";
 
 export type DashboardData = {
   first_name: string;
