@@ -11,8 +11,11 @@ async function post<T>(action: string, data: Record<string, unknown> = {}): Prom
     throw new Error((json as { error?: string }).error ?? `Request failed (${res.status})`);
   }
   return json;
+}
 
 export type Plan = "free" | "inner_circle" | "premium";
+
+
 
 
 
