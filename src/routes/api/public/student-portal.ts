@@ -42,6 +42,90 @@ async function bumpStreakForUser(userId: string): Promise<void> {
 
 
 
+type Plan = "free" | "inner_circle" | "premium";
+const PLAN_MONTHLY_MINUTES: Record<Plan, number> = { free: 10, inner_circle: 100, premium: 250 };
+const MILESTONES = [
+  "Skill Identified",
+  "Product Created",
+  "Offer Created",
+  "Product Uploaded to Selar",
+  "First Lead Generated",
+  "First Prospect Contacted",
+  "First Sale Made",
+];
+const STAGE_ORDER = ["seedling", "sprout", "grower", "closer", "winner", "ambassador"] as const;
+
+function computeStageFromMilestones(completedCount: number, firstSaleMade: boolean): typeof STAGE_ORDER[number] {
+  if (firstSaleMade) return "winner";
+  if (completedCount >= 5) return "closer";
+  if (completedCount >= 3) return "grower";
+  if (completedCount >= 1) return "sprout";
+  return "seedling";
+}
+
+async function ensureMonthlyMinutesReset(userId: string, resetDate: string | null) {
+  const today = new Date();
+  const thisMonth = today.toISOString().slice(0, 7); // YYYY-MM
+  const lastMonth = resetDate ? resetDate.slice(0, 7) : null;
+  if (lastMonth !== thisMonth) {
+    await supabaseAdmin.from("student_profiles").update({
+      monthly_minutes_used: 0,
+      monthly_minutes_reset_date: today.toISOString().slice(0, 10),
+    }).eq("user_id", userId);
+    return 0;
+  }
+  return null;
+}
+
+async function callGroqOrGemini(messages: { role: string; content: string }[], opts: { maxTokens: number; temperature?: number }): Promise<string | null> {
+  const temperature = opts.temperature ?? 0.7;
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    try {
+      const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "llama-3.1-8b-instant", messages, temperature, max_tokens: opts.maxTokens }),
+      });
+      if (r.ok) {
+        const j = await r.json() as { choices: { message: { content: string } }[] };
+        const reply = j?.choices?.[0]?.message?.content?.toString();
+        if (reply) return reply;
+      } else {
+        console.error("Groq error", r.status, await r.text().catch(() => ""));
+      }
+    } catch (e) { console.error("Groq exception", e); }
+  }
+
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    try {
+      const system = messages.find((m) => m.role === "system")?.content ?? "";
+      const conv = messages.filter((m) => m.role !== "system");
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: system }] },
+            contents: conv.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+            generationConfig: { temperature, maxOutputTokens: opts.maxTokens },
+          }),
+        },
+      );
+      if (r.ok) {
+        const j = await r.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+        const reply = j?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (reply) return reply;
+      } else {
+        console.error("Gemini error", r.status, await r.text().catch(() => ""));
+      }
+    } catch (e) { console.error("Gemini exception", e); }
+  }
+  return null;
+}
+
 const ok = (data: unknown) => new Response(JSON.stringify(data), {
   status: 200, headers: { "Content-Type": "application/json" },
 });
