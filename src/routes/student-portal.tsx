@@ -3,9 +3,14 @@ import { useEffect, useState } from "react";
 import { CodeGate } from "@/components/student/CodeGate";
 import { Onboarding } from "@/components/student/Onboarding";
 import { CoachChat } from "@/components/student/CoachChat";
+import { HomeTab } from "@/components/student/HomeTab";
+import { VoiceCallTab } from "@/components/student/VoiceCallTab";
+import { ProgressTab } from "@/components/student/ProgressTab";
+import { AccountTab } from "@/components/student/AccountTab";
+import { getDashboard, type Plan } from "@/lib/student-portal.functions";
 import {
   Users, Phone, Award, Gift, Settings,
-  BarChart3, LogOut, Shield,
+  BarChart3, LogOut, Shield, Home, MessageSquare, TrendingUp, User,
 } from "lucide-react";
 
 const SESSION_KEY = "k2c_student_session";

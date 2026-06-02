@@ -11,8 +11,8 @@ export const sendLeadMagnet = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => inputSchema.parse(input))
   .handler(async ({ data }) => {
     const BREVO_API_KEY = "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";
-    const APP_URL = process.env.APP_URL || process.env.SITE_URL || "https://k2c-academy.workers.dev";
-    const pdfUrl = `${APP_URL}/5-things-you-already-know.pdf`;
+    const SITE_URL = (process.env.SITE_URL || process.env.APP_URL || "https://k2c-academy.lovable.app").replace(/\/$/, "");
+    const pdfUrl = `${SITE_URL}/5-things-you-already-know.pdf`;
     const firstName = data.name.split(" ")[0];
 
     const res = await fetch("https://api.brevo.com/v3/smtp/email", {

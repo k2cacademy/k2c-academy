@@ -13,6 +13,12 @@ async function post<T>(action: string, data: Record<string, unknown> = {}): Prom
   return json;
 }
 
+export type Plan = "free" | "inner_circle" | "premium";
+
+
+
+
+
 export type Profile = {
   first_name: string | null; full_name: string | null; email: string | null;
   whatsapp: string | null; birthday_md: string | null; network: string | null;
@@ -34,8 +40,12 @@ export const completeOnboarding = (data: {
 export const getChatHistory = (session: string) =>
   post<{ id: string; role: string; content: string; created_at: string }[]>("get-chat-history", { session });
 
+export type MinutesState = {
+  free_remaining: number; purchased: number; total_remaining: number;
+  plan: Plan; monthly_cap: number; monthly_used: number;
+};
 export const getMinutesState = (session: string) =>
-  post<{ free_remaining: number; purchased: number; total_remaining: number }>("get-minutes-state", { session });
+  post<MinutesState>("get-minutes-state", { session });
 
 export const sendCoachMessage = (data: { session: string; message: string; voice?: boolean }) =>
   post<{ reply: string }>("send-coach-message", data);
@@ -52,14 +62,19 @@ export const getBookEditorState = (session: string) =>
 export const runBookEditor = (data: { session: string; mode: string; text: string }) =>
   post<{ edited: string; isInnerCircle: boolean; editsUsed: number; editsRemaining: number | null }>("run-book-editor", data);
 
+
 export type DashboardData = {
   first_name: string;
+  plan: Plan;
   is_inner_circle: boolean;
+  stage: "seedling" | "sprout" | "grower" | "closer" | "winner" | "ambassador";
   day_n: number;
   days_left: number | null;
   trial_expiring_soon: boolean;
   minutes_free_remaining: number;
   minutes_purchased: number;
+  monthly_cap: number;
+  monthly_used: number;
   streak_current: number;
   streak_longest: number;
   streak_active_today: boolean;
@@ -74,4 +89,24 @@ export const getDashboard = (session: string) =>
 
 export const bumpStreak = (session: string) =>
   post<{ current: number; longest: number }>("bump-streak", { session });
+
+export type Milestone = { milestone: string; completed: boolean; completed_at: string | null };
+export const getMilestones = (session: string) =>
+  post<{ milestones: Milestone[] }>("get-milestones", { session });
+export const updateMilestone = (data: { session: string; milestone: string; completed: boolean }) =>
+  post<{ ok: boolean }>("update-milestone", data);
+
+export type FlutterwaveInit = {
+  publicKey: string; amount: number; currency: "NGN"; tx_ref: string;
+  plan: Plan; customer: { email: string; name: string; phone_number: string };
+  meta: { user_id: string; plan: Plan };
+};
+export const flutterwaveInit = (data: { session: string; plan: Plan }) =>
+  post<FlutterwaveInit>("flutterwave-init", data);
+export const flutterwaveVerify = (data: { session: string; transaction_id: string; plan: Plan }) =>
+  post<{ ok: boolean; plan: Plan }>("flutterwave-verify", data);
+
+export const recordVoiceMinutes = (data: { session: string; seconds: number }) =>
+  post<{ ok: boolean }>("record-voice-minutes", data);
+
 

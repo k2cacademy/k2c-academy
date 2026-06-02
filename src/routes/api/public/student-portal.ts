@@ -42,6 +42,90 @@ async function bumpStreakForUser(userId: string): Promise<void> {
 
 
 
+type Plan = "free" | "inner_circle" | "premium";
+const PLAN_MONTHLY_MINUTES: Record<Plan, number> = { free: 10, inner_circle: 100, premium: 250 };
+const MILESTONES = [
+  "Skill Identified",
+  "Product Created",
+  "Offer Created",
+  "Product Uploaded to Selar",
+  "First Lead Generated",
+  "First Prospect Contacted",
+  "First Sale Made",
+];
+const STAGE_ORDER = ["seedling", "sprout", "grower", "closer", "winner", "ambassador"] as const;
+
+function computeStageFromMilestones(completedCount: number, firstSaleMade: boolean): typeof STAGE_ORDER[number] {
+  if (firstSaleMade) return "winner";
+  if (completedCount >= 5) return "closer";
+  if (completedCount >= 3) return "grower";
+  if (completedCount >= 1) return "sprout";
+  return "seedling";
+}
+
+async function ensureMonthlyMinutesReset(userId: string, resetDate: string | null) {
+  const today = new Date();
+  const thisMonth = today.toISOString().slice(0, 7); // YYYY-MM
+  const lastMonth = resetDate ? resetDate.slice(0, 7) : null;
+  if (lastMonth !== thisMonth) {
+    await supabaseAdmin.from("student_profiles").update({
+      monthly_minutes_used: 0,
+      monthly_minutes_reset_date: today.toISOString().slice(0, 10),
+    }).eq("user_id", userId);
+    return 0;
+  }
+  return null;
+}
+
+async function callGroqOrGemini(messages: { role: string; content: string }[], opts: { maxTokens: number; temperature?: number }): Promise<string | null> {
+  const temperature = opts.temperature ?? 0.7;
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    try {
+      const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "llama-3.1-8b-instant", messages, temperature, max_tokens: opts.maxTokens }),
+      });
+      if (r.ok) {
+        const j = await r.json() as { choices: { message: { content: string } }[] };
+        const reply = j?.choices?.[0]?.message?.content?.toString();
+        if (reply) return reply;
+      } else {
+        console.error("Groq error", r.status, await r.text().catch(() => ""));
+      }
+    } catch (e) { console.error("Groq exception", e); }
+  }
+
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    try {
+      const system = messages.find((m) => m.role === "system")?.content ?? "";
+      const conv = messages.filter((m) => m.role !== "system");
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: system }] },
+            contents: conv.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+            generationConfig: { temperature, maxOutputTokens: opts.maxTokens },
+          }),
+        },
+      );
+      if (r.ok) {
+        const j = await r.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+        const reply = j?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (reply) return reply;
+      } else {
+        console.error("Gemini error", r.status, await r.text().catch(() => ""));
+      }
+    } catch (e) { console.error("Gemini exception", e); }
+  }
+  return null;
+}
+
 const ok = (data: unknown) => new Response(JSON.stringify(data), {
   status: 200, headers: { "Content-Type": "application/json" },
 });
@@ -127,23 +211,23 @@ export const Route = createFileRoute("/api/public/student-portal")({
             const userId = verifySession(body.session as string);
             const { data: profile, error: dbErr } = await supabaseAdmin
               .from("student_profiles")
-              .select("daily_free_minutes_used, daily_free_minutes_reset_date, purchased_minutes_balance, inner_circle_status")
+              .select("monthly_minutes_used, monthly_minutes_reset_date, purchased_minutes_balance, subscription_plan")
               .eq("user_id", userId).maybeSingle();
             if (dbErr) throw new Error(dbErr.message);
-            const today = new Date().toISOString().slice(0, 10);
-            const isInner = profile?.inner_circle_status === "active";
-            const dailyFree = isInner ? 10 : 3;
-            let usedToday = profile?.daily_free_minutes_used ?? 0;
-            if (profile?.daily_free_minutes_reset_date !== today) {
-              usedToday = 0;
-              await supabaseAdmin.from("student_profiles").update({
-                daily_free_minutes_used: 0,
-                daily_free_minutes_reset_date: today,
-              }).eq("user_id", userId);
-            }
-            const free = Math.max(0, dailyFree - usedToday);
+            const resetTo0 = await ensureMonthlyMinutesReset(userId, profile?.monthly_minutes_reset_date ?? null);
+            const used = resetTo0 !== null ? 0 : (profile?.monthly_minutes_used ?? 0);
+            const plan = (profile?.subscription_plan ?? "free") as Plan;
+            const cap = PLAN_MONTHLY_MINUTES[plan] ?? PLAN_MONTHLY_MINUTES.free;
+            const free = Math.max(0, cap - used);
             const purchased = profile?.purchased_minutes_balance ?? 0;
-            return ok({ free_remaining: free, purchased, total_remaining: free + purchased });
+            return ok({
+              free_remaining: free,
+              purchased,
+              total_remaining: free + purchased,
+              plan,
+              monthly_cap: cap,
+              monthly_used: used,
+            });
           }
 
           // ── send-coach-message ───────────────────────────────────
@@ -171,28 +255,7 @@ export const Route = createFileRoute("/api/public/student-portal")({
               ...(history ?? []).reverse().map((m) => ({ role: m.role, content: m.content })),
             ];
 
-            const groqKey = process.env.GROQ_API_KEY;
-            let reply: string | null = null;
-
-            if (groqKey) {
-              try {
-                const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                  method: "POST",
-                  headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    model: "llama-3.1-8b-instant", messages, temperature: 0.7,
-                    max_tokens: isVoice ? 120 : 600,
-                  }),
-                });
-                if (r.ok) {
-                  const j = await r.json() as { choices: { message: { content: string } }[] };
-                  reply = j?.choices?.[0]?.message?.content?.toString() ?? null;
-                } else {
-                  console.error("Groq error", r.status, await r.text().catch(() => ""));
-                }
-              } catch (e) { console.error("Groq exception", e); }
-            }
-
+            let reply = await callGroqOrGemini(messages, { maxTokens: isVoice ? 120 : 600, temperature: 0.7 });
             if (!reply) reply = "I'm right here with you. Tell me one specific thing you want to move forward on today — sales, content, pricing, or a buyer reply — and we'll fix it together.";
 
             await supabaseAdmin.from("student_chat_messages").insert({
@@ -345,9 +408,9 @@ export const Route = createFileRoute("/api/public/student-portal")({
             const userId = verifySession(body.session as string);
             const today = new Date().toISOString().slice(0, 10);
 
-            const [{ data: profile }, { data: streak }, { data: lastSession }, { data: moduleEvents }] = await Promise.all([
+            const [{ data: profile }, { data: streak }, { data: lastSession }, { data: milestones }] = await Promise.all([
               supabaseAdmin.from("student_profiles")
-                .select("first_name, full_name, email, trial_start, trial_end, inner_circle_status, daily_free_minutes_used, daily_free_minutes_reset_date, purchased_minutes_balance")
+                .select("first_name, full_name, email, trial_start, trial_end, inner_circle_status, monthly_minutes_used, monthly_minutes_reset_date, purchased_minutes_balance, subscription_plan, stage")
                 .eq("user_id", userId).maybeSingle(),
               supabaseAdmin.from("streaks")
                 .select("current_streak, longest_streak, last_active")
@@ -357,15 +420,15 @@ export const Route = createFileRoute("/api/public/student-portal")({
                 .eq("user_id", userId)
                 .not("action_step", "is", null)
                 .order("created_at", { ascending: false }).limit(1).maybeSingle(),
-              supabaseAdmin.from("student_events")
-                .select("module_name")
-                .eq("user_id", userId).eq("event_type", "module_complete"),
+              supabaseAdmin.from("progress_tracker")
+                .select("milestone, completed").eq("user_id", userId),
             ]);
 
-            const isInner = profile?.inner_circle_status === "active";
-            const dailyFree = isInner ? 10 : 3;
-            const usedToday = profile?.daily_free_minutes_reset_date === today ? (profile?.daily_free_minutes_used ?? 0) : 0;
-            const minutesFree = Math.max(0, dailyFree - usedToday);
+            const resetTo0 = await ensureMonthlyMinutesReset(userId, profile?.monthly_minutes_reset_date ?? null);
+            const used = resetTo0 !== null ? 0 : (profile?.monthly_minutes_used ?? 0);
+            const plan = (profile?.subscription_plan ?? "free") as Plan;
+            const cap = PLAN_MONTHLY_MINUTES[plan] ?? PLAN_MONTHLY_MINUTES.free;
+            const minutesFree = Math.max(0, cap - used);
             const purchased = profile?.purchased_minutes_balance ?? 0;
 
             const trialStart = profile?.trial_start ? new Date(profile.trial_start) : null;
@@ -373,21 +436,33 @@ export const Route = createFileRoute("/api/public/student-portal")({
             const dayN = trialStart ? Math.max(1, Math.floor((Date.now() - trialStart.getTime()) / 86400_000) + 1) : 1;
             const daysLeft = trialEnd ? Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400_000)) : null;
 
-            const completedModules = new Set((moduleEvents ?? []).map((e) => e.module_name).filter(Boolean)).size;
+            const completedSet = new Set((milestones ?? []).filter((m) => m.completed).map((m) => m.milestone));
+            const completedCount = completedSet.size;
+            const firstSaleMade = completedSet.has("First Sale Made");
+            const computedStage = computeStageFromMilestones(completedCount, firstSaleMade);
+            const stage = (profile?.stage as typeof STAGE_ORDER[number]) ?? computedStage;
+            // keep stage in sync if it advanced
+            if (computedStage !== stage && STAGE_ORDER.indexOf(computedStage) > STAGE_ORDER.indexOf(stage)) {
+              await supabaseAdmin.from("student_profiles").update({ stage: computedStage }).eq("user_id", userId);
+            }
 
             return ok({
               first_name: profile?.first_name ?? profile?.full_name?.split(" ")[0] ?? "Student",
-              is_inner_circle: isInner,
+              plan,
+              is_inner_circle: plan !== "free",
+              stage: STAGE_ORDER.indexOf(computedStage) > STAGE_ORDER.indexOf(stage) ? computedStage : stage,
               day_n: dayN,
               days_left: daysLeft,
-              trial_expiring_soon: daysLeft !== null && daysLeft <= 2 && !isInner,
+              trial_expiring_soon: daysLeft !== null && daysLeft <= 2 && plan === "free",
               minutes_free_remaining: minutesFree,
               minutes_purchased: purchased,
+              monthly_cap: cap,
+              monthly_used: used,
               streak_current: streak?.current_streak ?? 0,
               streak_longest: streak?.longest_streak ?? 0,
               streak_active_today: streak?.last_active === today,
-              modules_completed: completedModules,
-              modules_total: 6,
+              modules_completed: completedCount,
+              modules_total: MILESTONES.length,
               last_action_step: lastSession?.action_step ?? null,
               last_session_at: lastSession?.created_at ?? null,
             });
@@ -400,6 +475,125 @@ export const Route = createFileRoute("/api/public/student-portal")({
             const { data: s } = await supabaseAdmin
               .from("streaks").select("current_streak, longest_streak").eq("user_id", userId).maybeSingle();
             return ok({ current: s?.current_streak ?? 1, longest: s?.longest_streak ?? 1 });
+          }
+
+          // ── get-milestones ──────────────────────────────────────
+          if (action === "get-milestones") {
+            const userId = verifySession(body.session as string);
+            const { data } = await supabaseAdmin
+              .from("progress_tracker").select("milestone, completed, completed_at").eq("user_id", userId);
+            const map = new Map((data ?? []).map((r) => [r.milestone, r]));
+            return ok({
+              milestones: MILESTONES.map((m) => ({
+                milestone: m,
+                completed: map.get(m)?.completed ?? false,
+                completed_at: map.get(m)?.completed_at ?? null,
+              })),
+            });
+          }
+
+          // ── update-milestone ────────────────────────────────────
+          if (action === "update-milestone") {
+            const userId = verifySession(body.session as string);
+            const milestone = String(body.milestone ?? "");
+            const completed = body.completed === true;
+            if (!MILESTONES.includes(milestone)) throw new Error("Invalid milestone");
+
+            const { data: existing } = await supabaseAdmin
+              .from("progress_tracker").select("id").eq("user_id", userId).eq("milestone", milestone).maybeSingle();
+            const completedAt = completed ? new Date().toISOString() : null;
+            if (existing) {
+              await supabaseAdmin.from("progress_tracker")
+                .update({ completed, completed_at: completedAt }).eq("id", existing.id);
+            } else {
+              await supabaseAdmin.from("progress_tracker").insert({
+                user_id: userId, milestone, completed, completed_at: completedAt,
+              });
+            }
+            return ok({ ok: true });
+          }
+
+          // ── flutterwave-init ────────────────────────────────────
+          // Returns the public key + amount so the client launches FlutterwaveCheckout inline.
+          if (action === "flutterwave-init") {
+            const userId = verifySession(body.session as string);
+            const plan = String(body.plan ?? "") as Plan;
+            const PRICES: Record<Plan, number> = { free: 0, inner_circle: 1000, premium: 1500 };
+            const amount = PRICES[plan];
+            if (!amount) throw new Error("Invalid plan");
+            const { data: p } = await supabaseAdmin.from("student_profiles")
+              .select("first_name, email, whatsapp").eq("user_id", userId).maybeSingle();
+            const tx_ref = `K2C-PLAN-${plan}-${userId.slice(0, 8)}-${Date.now()}`;
+            return ok({
+              publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY ?? "FLWPUBK-8c54aa491f6c0411b2e9b158189a7072-X",
+              amount, currency: "NGN", tx_ref, plan,
+              customer: {
+                email: p?.email ?? "student@k2c.academy",
+                name: p?.first_name ?? "K2Ç Student",
+                phone_number: p?.whatsapp ?? "",
+              },
+              meta: { user_id: userId, plan },
+            });
+          }
+
+          // ── flutterwave-verify ──────────────────────────────────
+          if (action === "flutterwave-verify") {
+            const userId = verifySession(body.session as string);
+            const txId = String(body.transaction_id ?? "");
+            const plan = String(body.plan ?? "") as Plan;
+            const secret = process.env.FLUTTERWAVE_SECRET_KEY;
+            if (!secret) throw new Error("Flutterwave not configured");
+            if (!txId) throw new Error("Missing transaction_id");
+            const r = await fetch(`https://api.flutterwave.com/v3/transactions/${encodeURIComponent(txId)}/verify`, {
+              headers: { Authorization: `Bearer ${secret}` },
+            });
+            const j = await r.json() as { status?: string; data?: { status?: string; amount?: number } };
+            if (j?.status !== "success" || j?.data?.status !== "successful") {
+              return err("Payment not verified", 400);
+            }
+            // Activate plan
+            const monthAhead = new Date(Date.now() + 30 * 86400_000).toISOString();
+            await supabaseAdmin.from("student_profiles").update({
+              subscription_plan: plan,
+              inner_circle_status: plan === "free" ? "none" : "active",
+              inner_circle_start: new Date().toISOString(),
+              inner_circle_expiry: monthAhead,
+            }).eq("user_id", userId);
+            return ok({ ok: true, plan });
+          }
+
+          // ── record-voice-minutes ────────────────────────────────
+          if (action === "record-voice-minutes") {
+            const userId = verifySession(body.session as string);
+            const seconds = Math.max(0, Math.floor(Number(body.seconds ?? 0)));
+            if (seconds === 0) return ok({ ok: true });
+            const minutes = Math.ceil(seconds / 60);
+            const { data: p } = await supabaseAdmin.from("student_profiles")
+              .select("monthly_minutes_used, monthly_minutes_reset_date, purchased_minutes_balance, subscription_plan")
+              .eq("user_id", userId).maybeSingle();
+            await ensureMonthlyMinutesReset(userId, p?.monthly_minutes_reset_date ?? null);
+            const plan = (p?.subscription_plan ?? "free") as Plan;
+            const cap = PLAN_MONTHLY_MINUTES[plan] ?? PLAN_MONTHLY_MINUTES.free;
+            const currentUsed = p?.monthly_minutes_used ?? 0;
+            const freeLeft = Math.max(0, cap - currentUsed);
+            const usedFree = Math.min(freeLeft, minutes);
+            const fromPurchased = Math.max(0, minutes - usedFree);
+            const newPurchased = Math.max(0, (p?.purchased_minutes_balance ?? 0) - fromPurchased);
+
+            await supabaseAdmin.from("student_profiles").update({
+              monthly_minutes_used: currentUsed + usedFree,
+              purchased_minutes_balance: newPurchased,
+            }).eq("user_id", userId);
+
+            await supabaseAdmin.from("voice_call_log").insert({
+              user_id: userId,
+              status: "ended",
+              duration_seconds: seconds,
+              minutes_used: minutes,
+              was_free: fromPurchased === 0,
+              ended_at: new Date().toISOString(),
+            });
+            return ok({ ok: true });
           }
 
           return err("Unknown action", 400);
