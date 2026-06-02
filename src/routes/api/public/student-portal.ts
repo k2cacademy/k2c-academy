@@ -211,23 +211,23 @@ export const Route = createFileRoute("/api/public/student-portal")({
             const userId = verifySession(body.session as string);
             const { data: profile, error: dbErr } = await supabaseAdmin
               .from("student_profiles")
-              .select("daily_free_minutes_used, daily_free_minutes_reset_date, purchased_minutes_balance, inner_circle_status")
+              .select("monthly_minutes_used, monthly_minutes_reset_date, purchased_minutes_balance, subscription_plan")
               .eq("user_id", userId).maybeSingle();
             if (dbErr) throw new Error(dbErr.message);
-            const today = new Date().toISOString().slice(0, 10);
-            const isInner = profile?.inner_circle_status === "active";
-            const dailyFree = isInner ? 10 : 3;
-            let usedToday = profile?.daily_free_minutes_used ?? 0;
-            if (profile?.daily_free_minutes_reset_date !== today) {
-              usedToday = 0;
-              await supabaseAdmin.from("student_profiles").update({
-                daily_free_minutes_used: 0,
-                daily_free_minutes_reset_date: today,
-              }).eq("user_id", userId);
-            }
-            const free = Math.max(0, dailyFree - usedToday);
+            const resetTo0 = await ensureMonthlyMinutesReset(userId, profile?.monthly_minutes_reset_date ?? null);
+            const used = resetTo0 !== null ? 0 : (profile?.monthly_minutes_used ?? 0);
+            const plan = (profile?.subscription_plan ?? "free") as Plan;
+            const cap = PLAN_MONTHLY_MINUTES[plan] ?? PLAN_MONTHLY_MINUTES.free;
+            const free = Math.max(0, cap - used);
             const purchased = profile?.purchased_minutes_balance ?? 0;
-            return ok({ free_remaining: free, purchased, total_remaining: free + purchased });
+            return ok({
+              free_remaining: free,
+              purchased,
+              total_remaining: free + purchased,
+              plan,
+              monthly_cap: cap,
+              monthly_used: used,
+            });
           }
 
           // ── send-coach-message ───────────────────────────────────
