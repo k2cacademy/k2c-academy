@@ -562,6 +562,40 @@ export const Route = createFileRoute("/api/public/student-portal")({
             return ok({ ok: true, plan });
           }
 
+          // ── record-voice-minutes ────────────────────────────────
+          if (action === "record-voice-minutes") {
+            const userId = verifySession(body.session as string);
+            const seconds = Math.max(0, Math.floor(Number(body.seconds ?? 0)));
+            if (seconds === 0) return ok({ ok: true });
+            const minutes = Math.ceil(seconds / 60);
+            const { data: p } = await supabaseAdmin.from("student_profiles")
+              .select("monthly_minutes_used, monthly_minutes_reset_date, purchased_minutes_balance, subscription_plan")
+              .eq("user_id", userId).maybeSingle();
+            await ensureMonthlyMinutesReset(userId, p?.monthly_minutes_reset_date ?? null);
+            const plan = (p?.subscription_plan ?? "free") as Plan;
+            const cap = PLAN_MONTHLY_MINUTES[plan] ?? PLAN_MONTHLY_MINUTES.free;
+            const currentUsed = p?.monthly_minutes_used ?? 0;
+            const freeLeft = Math.max(0, cap - currentUsed);
+            const usedFree = Math.min(freeLeft, minutes);
+            const fromPurchased = Math.max(0, minutes - usedFree);
+            const newPurchased = Math.max(0, (p?.purchased_minutes_balance ?? 0) - fromPurchased);
+
+            await supabaseAdmin.from("student_profiles").update({
+              monthly_minutes_used: currentUsed + usedFree,
+              purchased_minutes_balance: newPurchased,
+            }).eq("user_id", userId);
+
+            await supabaseAdmin.from("voice_call_log").insert({
+              user_id: userId,
+              status: "ended",
+              duration_seconds: seconds,
+              minutes_used: minutes,
+              was_free: fromPurchased === 0,
+              ended_at: new Date().toISOString(),
+            });
+            return ok({ ok: true });
+          }
+
           return err("Unknown action", 400);
 
         } catch (e) {
