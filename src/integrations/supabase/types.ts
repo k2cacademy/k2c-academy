@@ -562,6 +562,36 @@ export type Database = {
         }
         Relationships: []
       }
+      progress_tracker: {
+        Row: {
+          completed: boolean
+          completed_at: string | null
+          created_at: string
+          id: string
+          milestone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          milestone: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          milestone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       recharge_history: {
         Row: {
           amount_ngn: number
@@ -697,12 +727,16 @@ export type Database = {
           inner_circle_status: string
           is_ambassador: boolean
           is_inner_circle: boolean
+          monthly_minutes_reset_date: string
+          monthly_minutes_used: number
           network: string | null
           onboarding_complete: boolean
           phone_number: string | null
           purchased_minutes_balance: number
           secret_code_role: string | null
+          stage: string
           status: string
+          subscription_plan: string
           tags: string[]
           trial_end: string | null
           trial_start: string | null
@@ -730,12 +764,16 @@ export type Database = {
           inner_circle_status?: string
           is_ambassador?: boolean
           is_inner_circle?: boolean
+          monthly_minutes_reset_date?: string
+          monthly_minutes_used?: number
           network?: string | null
           onboarding_complete?: boolean
           phone_number?: string | null
           purchased_minutes_balance?: number
           secret_code_role?: string | null
+          stage?: string
           status?: string
+          subscription_plan?: string
           tags?: string[]
           trial_end?: string | null
           trial_start?: string | null
@@ -763,12 +801,16 @@ export type Database = {
           inner_circle_status?: string
           is_ambassador?: boolean
           is_inner_circle?: boolean
+          monthly_minutes_reset_date?: string
+          monthly_minutes_used?: number
           network?: string | null
           onboarding_complete?: boolean
           phone_number?: string | null
           purchased_minutes_balance?: number
           secret_code_role?: string | null
+          stage?: string
           status?: string
+          subscription_plan?: string
           tags?: string[]
           trial_end?: string | null
           trial_start?: string | null
