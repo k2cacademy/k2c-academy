@@ -1,124 +1,61 @@
-# K2Ç Academy — 13-System Build Plan
+# Student Portal Complete Fix & Upgrade — Plan
 
-## Critical blockers I need from you first
+## ⚠ Blockers I need answered before I start
 
-1. **Telegram bot token** — you said "already in project" but the only secrets stored are `LOVABLE_API_KEY` and Supabase ones. I'll need you to add `TELEGRAM_BOT_TOKEN` via the secrets prompt. I'll request it as soon as you approve this plan.
-2. **External "coach brain" Supabase** (`bgnqlrlcadrkubrrbnji.supabase.co`) — I need its **anon key** (and/or service-role key) to call `match_coach_brain`. I'll request `COACH_BRAIN_SUPABASE_ANON_KEY` (+ optionally `COACH_BRAIN_SUPABASE_SERVICE_ROLE_KEY`).
-3. **LiveKit credentials you pasted in chat** — I'll move these into secret storage (not code): `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`. Please rotate the secret on LiveKit since it was sent in plain chat.
-4. **Systeme.io specifics** — what's the **course ID** for "Zero to First Online Sale System" and the **tag ID** for "K2Ç Student"? (The API needs IDs, not names.)
-5. **Resend sender** — keep using `onboarding@resend.dev` for now, or do you have a verified domain?
-6. **TidyCal booking URL** — for System 13.
-7. **Confirm:** I will **remove** all Paystack and Vapi code paths (ambassador payouts via Paystack, voice calls via Vapi). Ambassador payouts will become "manual / TODO" unless you want a Flutterwave/Monnify replacement now.
+1. **GEMINI_API_KEY is not configured.** Your spec says "use Groq first then Gemini as fallback" everywhere, but only `GROQ_API_KEY` exists in secrets. I'll need to add it via the secret tool. Confirm you want Gemini added (vs. keeping Groq-only with a friendly fallback message — which already works).
+2. **About "the root cause of the portal breaking" — `getProfile(session)` vs `getProfile({ data: { session } })`.** That diagnosis is incorrect for the current code. `student-portal.functions.ts` was already refactored to thin `fetch()` wrappers that accept a plain string — calling `getProfile(session)` is the correct pattern. The `{ data: ... }` shape only applies to `createServerFn` wrappers (we removed those). If the portal is broken in a specific way (specific click → specific error), tell me what you saw — otherwise I'll skip this "fix" because it would actually break it.
+3. **Voice minutes — your spec contradicts what's live.**
+   - Spec: Free **10/month**, Inner Circle **100/month**, Premium **250/month**.
+   - Live code: Free **3/day**, Inner Circle **10/day**, no Premium tier.
+   - Confirm switching to **monthly** quotas + adding **Premium**. This is a schema + reset-cron change.
+4. **`progress_tracker` table doesn't exist.** I'll create it with the 7 milestones (Skill Identified → First Sale Made). Confirm.
+5. **`subscription_plan` and `stage` columns don't exist on `student_profiles`.** I'll add `subscription_plan text default 'free'` and `stage text default 'seedling'`. Confirm.
+6. **Flutterwave subscription upgrades.** Currently Monnify is wired for minute top-ups. You want Flutterwave inline checkout for plan upgrades — different flow, different webhook. I'll add a new `flutterwave-webhook` route + Flutterwave init action. Confirm.
+7. **VAPI integration is brand new** — not in the codebase today. I'll add `@vapi-ai/web`, build a rotation client, and silently fall through 5 publicKey/assistantId pairs before LiveKit dispatch.
 
----
+## Phase A — Schema & secrets (one migration)
 
-## Phase A — Foundations (no UI yet)
+- Add columns to `student_profiles`: `subscription_plan text default 'free'`, `stage text default 'seedling'`, `monthly_minutes_used int default 0`, `monthly_minutes_reset_date date default now()`.
+- Create `progress_tracker (id, user_id, milestone, completed, completed_at)` with RLS + GRANTs.
+- Add `GEMINI_API_KEY` secret (via secret tool — requires your input).
 
-**A1. Secrets & cleanup**
-- Add: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_CHAT_ID` (= 7115484089), `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `COACH_BRAIN_SUPABASE_URL`, `COACH_BRAIN_SUPABASE_ANON_KEY`, `TIDYCAL_URL`, `SYSTEMEIO_COURSE_ID`, `SYSTEMEIO_STUDENT_TAG_ID`.
-- Strip Paystack/Vapi from code & UI.
+## Phase B — Server-side fixes
 
-**A2. Database migrations** (per your spec, additive — keeps existing tables):
-- `students_v2` view or extend `student_profiles` with `tags text[]`, `trial_start`, `trial_expiry`, `status`.
-- `payments` (links to existing `payment_verifications`, adds `receipt_hash`).
-- `events` (student_email, event_type, module_name, ts WAT).
-- `coach_sessions` (date, duration, mood, action_step, summary).
-- `streaks` (current, longest, last_active).
-- `telegram_actions` log (for APPROVE/REJECT audit).
-- `systemeio_events` (raw webhook payloads).
-- Unique index on `payments.receipt_hash` for duplicate detection.
-- All RLS: student sees own rows; admin sees all.
+- `student-portal.ts`: replace daily 3/10 quota with monthly 10/100/250 by plan; add `get-dashboard` plan/stage/minutes; add `update-milestone`, `flutterwave-init`, `flutterwave-verify` actions.
+- Add Gemini fallback after Groq in `send-coach-message` and `ask-nathy`.
+- `ask-nathy.ts`: confirm no `callLovable` references remain (grep — already clean per last edits, will verify).
+- `lead-magnet.functions.ts`: build PDF URL from `process.env.SITE_URL` only; server-side fetch + attach to Resend.
 
----
+## Phase C — Frontend rebuild (CoachChat → StudentPortalApp)
 
-## Phase B — Payment & approval pipeline (Systems 1, 2, 7, 9)
+- New shell with bottom nav: **Home / Chat / Voice / Progress / Account**.
+- **Home**: welcome + plan badge + minutes left + stage tracker (6 stages, current highlighted) + 5 quick-action buttons.
+- **Chat**: existing CoachChat moved into a tab (keep behavior, drop the embedded dashboard widget — Home owns that now).
+- **Voice**: new `VapiCall` component with rotation chain + LiveKit fallback, ringtone `/From Knowledge to Cash.mp3`, mute + end buttons, live minute counter.
+- **Progress**: 7-milestone checklist with check toggles → `update-milestone`.
+- **Account**: current plan + 3 upgrade cards (Free/Inner/Premium) + Flutterwave inline checkout button using public key `FLWPUBK-8c54...-X`.
 
-**B1. Receipt verification (System 2)** — upgrade existing `verifyPayment` server fn:
-- Hash receipt bytes (sha256) → store in `payments.receipt_hash` → reject duplicates with friendly message.
-- Stream live status to the client ("Reading…", "Amount confirmed", "Submitted for approval") via progressive server-fn calls.
-- Gemini Vision already wired; just tighten amount-match logic for Course/Inner Circle/Top-up.
+## Phase D — VAPI rotation client
 
-**B2. Telegram Command Center (System 1)**:
-- New server fn `notifyTelegramPayment` posts message + photo + inline keyboard (APPROVE/REJECT) with `callback_data = approve:<verification_id>` / `reject:<verification_id>`.
-- New public route `/api/public/hooks/telegram-webhook` — verifies `X-Telegram-Bot-Api-Secret-Token`, parses callback, dispatches to approve/reject handler.
-- Approve handler: marks verification verified → upserts student → calls Systeme.io enroll + tag → sets `trial_start = now()`, `trial_expiry = now() + 14d` → sends Resend welcome email → posts confirmation to Telegram → enables success screen for student.
-- Reject handler: marks rejected → sends Resend "couldn't verify" email with WhatsApp link → Telegram confirmation.
-- Register webhook URL once from sandbox.
+- New `src/lib/vapi-rotation.ts` holding the 5 (publicKey, assistantId) pairs.
+- `startCallWithRotation()`: try pair 1 → on `error`/`call-end` before connected → silently destroy and try pair 2 → … → after pair 5 fails, call existing `livekit-token` + `livekit-dispatch` endpoints.
+- All transitions invisible to user (single "Connecting…" UI state).
 
-**B3. Systeme.io webhook receiver (System 7)**:
-- Public route `/api/public/hooks/systemeio-webhook` — validates signature (you'll paste the webhook secret in Systeme.io UI), stores raw event + parsed fields into `systemeio_events` and `events`.
+## Phase E — Polish
 
-**B4. Upsell (System 9)**:
-- Success screen shows Inner Circle offer card.
-- "Yes" → records `inner_circle_status='pending_founding'` + sends Telegram upsell alert.
+- Keep ringtone file path verified (will check `public/`).
+- Keep homepage, Navbar, Hero, About, Programs, Team, Results, LeadMagnet, FAQ, Enroll, Footer, ShareWinModal, Notifications, styles.css, `_authenticated/portal` **untouched**.
 
----
+## What I will NOT touch
 
-## Phase C — Voice & Brain (Systems 3, 4, 13)
+Per your spec: homepage, all `src/components/site/*`, `ShareWinModal`, `Notifications`, `styles.css`, `/portal` authenticated route.
 
-**C1. LiveKit voice (System 3)** — replace existing Vapi flow:
-- Server fn `mintLivekitToken` issues a JWT for room `coach-<userId>-<timestamp>`.
-- Client uses `@livekit/components-react` to connect, shows duration timer, mute, end-call.
-- Railway agent auto-joins (it already listens to the LiveKit cloud).
-- Mobile-tested mic permission UX.
+## How I'll deliver
 
-**C2. RAG brain (System 4)**:
-- Server fn `askCoach` takes user message → embeds (via Lovable AI Gateway embeddings) → calls `match_coach_brain` RPC on the external coach-brain Supabase → injects top chunks into a "Digital Nathy" system prompt → returns answer.
-- Replaces current coach-brain string.
-
-**C3. Escalation (System 13)**:
-- Track `stuck_count` per session; after 2 consecutive "stuck" or 14 days no progress → coach reply includes TidyCal link + fires Telegram alert.
+I'll do this in 2 turns:
+- **Turn 1**: Phase A migration + secret request. Wait for approval/secret.
+- **Turn 2**: All code changes (Phases B–E) in one shot, then verify via build + a quick console-log sanity check.
 
 ---
 
-## Phase D — Student dashboard & engagement (Systems 10, 11, 5 partial)
-
-**D1. Dashboard (System 10)** — new component in `_authenticated/portal`:
-- Welcome, current goal, module X of 6, day-N counter, today's coach minutes remaining, "next step from last session" pulled from latest `coach_sessions.action_step`.
-- CTAs: TALK TO COACH / CONTINUE COURSE.
-
-**D2. Streaks (System 11)**:
-- On login / lesson complete / coach chat → upsert `streaks` (increment if `last_active = today-1`, reset if older).
-- Display flame + streak count on dashboard.
-- Daily 9pm WAT cron: if `last_active < today` and streak was ≥2 → Resend "don't break your streak" email.
-
-**D3. Per-event Telegram alerts (System 5)**:
-- Hooks in: payment approve, module complete (from Systeme.io webhook), course complete, trial-expiring-in-2d (daily cron), inactive-7d (daily cron — includes "Message on WhatsApp" button).
-
----
-
-## Phase E — Reporting & analytics (Systems 6, 8, 12)
-
-**E1. Daily morning report (System 6)** — pg_cron 8AM WAT → public route → aggregates → Telegram message.
-
-**E2. Weekly success prediction (System 12)** — pg_cron Mon 8AM WAT → per-student scoring (logins, coach sessions, days since signup) → bucket High/Medium/Low → AT RISK / HIGH POTENTIAL flags → Telegram with WhatsApp deep-link buttons.
-
-**E3. Google Analytics (System 8)** — gtag snippet in `__root.tsx` head with `G-YJ90XMTRGC`.
-
----
-
-## Technical notes
-
-- All cron jobs use `pg_cron` + `pg_net` hitting `/api/public/hooks/*` (anon-key `apikey` header per Lovable conventions).
-- WAT timestamps stored as `timestamptz` (UTC); formatted to `Africa/Lagos` only at the edge (Telegram messages, emails, UI).
-- Telegram inline-keyboard callbacks use a derived secret token (sha256 of bot token) — same pattern as the Telegram knowledge file.
-- Receipt hash = sha256 of the uploaded file bytes; computed in `verifyPayment` server fn before Gemini call.
-- External coach-brain Supabase gets its own browser-safe client at `src/integrations/coach-brain/client.ts`.
-- The Lovable AI Gateway covers both chat (`google/gemini-3-flash-preview`) and embeddings (`google/gemini-embedding-001`) — no Groq/Gemini direct keys needed for the coach. Keep `GEMINI_API_KEY` only for receipt Vision (current code).
-
-## Suggested build order (so you can ship in chunks)
-
-1. Phase A (foundations) — ~1 turn.
-2. Phase B (payments + Telegram + Systeme + upsell) — biggest user-visible win.
-3. Phase E.3 (GA) — trivial drop-in.
-4. Phase C (voice + RAG) — once LiveKit secret is rotated.
-5. Phase D (dashboard + streaks).
-6. Phase E.1 + E.2 (cron reports).
-
----
-
-## What I need from you to start
-
-Reply with:
-- Answers to the 7 blockers above (especially Systeme course/tag IDs + confirmation to drop Paystack/Vapi).
-- Approval to begin Phase A (I'll request all required secrets in one prompt right after).
+**Please answer the 7 blockers above (especially #1, #2, #3, #6) and I'll start with the migration.**
