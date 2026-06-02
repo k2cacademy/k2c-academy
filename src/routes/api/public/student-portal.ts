@@ -255,28 +255,7 @@ export const Route = createFileRoute("/api/public/student-portal")({
               ...(history ?? []).reverse().map((m) => ({ role: m.role, content: m.content })),
             ];
 
-            const groqKey = process.env.GROQ_API_KEY;
-            let reply: string | null = null;
-
-            if (groqKey) {
-              try {
-                const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                  method: "POST",
-                  headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    model: "llama-3.1-8b-instant", messages, temperature: 0.7,
-                    max_tokens: isVoice ? 120 : 600,
-                  }),
-                });
-                if (r.ok) {
-                  const j = await r.json() as { choices: { message: { content: string } }[] };
-                  reply = j?.choices?.[0]?.message?.content?.toString() ?? null;
-                } else {
-                  console.error("Groq error", r.status, await r.text().catch(() => ""));
-                }
-              } catch (e) { console.error("Groq exception", e); }
-            }
-
+            let reply = await callGroqOrGemini(messages, { maxTokens: isVoice ? 120 : 600, temperature: 0.7 });
             if (!reply) reply = "I'm right here with you. Tell me one specific thing you want to move forward on today — sales, content, pricing, or a buyer reply — and we'll fix it together.";
 
             await supabaseAdmin.from("student_chat_messages").insert({
