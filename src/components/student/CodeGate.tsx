@@ -1,46 +1,31 @@
 import { useState } from "react";
 import { Lock, Shield, Zap, ArrowLeft } from "lucide-react";
 import nathyPhoto from "@/assets/digital-nathy.jpg";
+import { verifyAccessCode } from "@/lib/student-portal.functions";
 
 const WHATSAPP = "https://wa.me/2349164266235";
-
-function getOrCreateSession(): string {
-  try {
-    const existing = localStorage.getItem("k2c_session");
-    if (existing) return existing;
-    const session = `k2c_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem("k2c_session", session);
-    return session;
-  } catch {
-    return `k2c_${Date.now()}`;
-  }
-}
 
 export function CodeGate({ onVerified }: { onVerified: (session: string) => void }) {
   const [code, setCode] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setErr(null);
-
-    const normalised = code.trim().toUpperCase()
-      .replace(/Ç/g, "C")
-      .replace(/ç/g, "C");
-
-    const valid = ["K2C-STUDENT", "K2CACADEMY"].includes(normalised);
-
-    setTimeout(() => {
-      setBusy(false);
-      if (valid) {
-        const session = getOrCreateSession();
-        onVerified(session);
+    try {
+      const res = await verifyAccessCode(code.trim());
+      if (res.ok && res.session) {
+        onVerified(res.session);
       } else {
         setErr("Hmm, that code doesn't match. Check your purchase confirmation or WhatsApp us.");
       }
-    }, 800);
+    } catch {
+      setErr("Could not reach the server. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (

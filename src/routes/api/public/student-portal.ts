@@ -43,7 +43,10 @@ async function bumpStreakForUser(userId: string): Promise<void> {
 
 
 type Plan = "free" | "inner_circle" | "premium";
-const PLAN_MONTHLY_MINUTES: Record<Plan, number> = { free: 10, inner_circle: 100, premium: 250 };
+const PLAN_MONTHLY_MINUTES: Record<Plan, number> = { free: 10, inner_circle: 25, premium: 40 };
+const PLAN_PRICES_NGN: Record<Plan, number> = { free: 0, inner_circle: 1000, premium: 2500 };
+const FOUNDING_COUPON = "FOUNDING10";
+const FOUNDING_DISCOUNT = 0.10;
 const MILESTONES = [
   "Skill Identified",
   "Product Created",
@@ -146,13 +149,14 @@ export const Route = createFileRoute("/api/public/student-portal")({
         try {
 
           // ── verify-code ──────────────────────────────────────────
+          // Accept BOTH "K2C-STUDENT" and "K2Ç-STUDENT" (case-insensitive, Ç↔C normalised).
           if (action === "verify-code") {
-            const code = (body.code as string ?? "").trim();
-            const { data: row, error: dbErr } = await supabaseAdmin
-              .from("app_settings").select("value").eq("key", "student_access_code").maybeSingle();
-            if (dbErr) throw new Error(dbErr.message);
-            const expected = (row?.value ?? "K2Ç-STUDENT").trim();
-            if (code !== expected) return ok({ ok: false });
+            const raw = (body.code as string ?? "").trim();
+            const normalised = raw.toUpperCase().replace(/Ç/g, "C").replace(/ç/g, "C");
+            const accepted = new Set(["K2C-STUDENT", "K2CACADEMY"]);
+            if (!accepted.has(normalised)) return ok({ ok: false });
+            // Try to reuse an existing anonymous student profile via cookie-less id is impossible —
+            // CodeGate stores the signed session in localStorage, so each new device gets a new id.
             const userId = randomUUID();
             const today = new Date().toISOString().slice(0, 10);
             const end = new Date(Date.now() + 14 * 86400_000).toISOString().slice(0, 10);
