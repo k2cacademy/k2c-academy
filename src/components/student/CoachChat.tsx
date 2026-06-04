@@ -175,7 +175,7 @@ export function CoachChat({ session, profile }: { session: string; profile: Prof
                         {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         {m.role === "user" ? " ✓✓" : ""}
                       </span>
-                      {m.role === "assistant" && <SpeakerButton text={m.content} session={session} />}
+                      {m.role === "assistant" && <SpeakerButton text={m.content} gender="male" />}
                     </div>
                   </div>
                 </div>

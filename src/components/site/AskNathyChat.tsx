@@ -120,7 +120,7 @@ export function AskNathyChat({
                 {m.content}
                 {m.role === "assistant" && i > 0 && (
                   <div className="mt-2 flex justify-end">
-                    <SpeakerButton text={m.content} />
+                    <SpeakerButton text={m.content} gender="female" />
                   </div>
                 )}
               </div>

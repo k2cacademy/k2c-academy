@@ -7,8 +7,8 @@ type Status = "idle" | "connecting" | "in-call" | "ended" | "no-minutes";
 
 const PLAN_LABEL: Record<MinutesState["plan"], string> = {
   free: "Free — 10 mins/month",
-  inner_circle: "Inner Circle — 100 mins/month",
-  premium: "Premium — 250 mins/month",
+  inner_circle: "Inner Circle — 25 mins/month",
+  premium: "Premium — 40 mins/month",
 };
 
 export function VoiceCallTab({
@@ -66,9 +66,10 @@ export function VoiceCallTab({
     // Play ringtone while connecting
     try {
       if (!ringRef.current) {
-        ringRef.current = new Audio("/From Knowledge to Cash.mp3");
+        // URL-encode spaces so the browser fetches the correct file
+        ringRef.current = new Audio(encodeURI("/From Knowledge to Cash.mp3"));
         ringRef.current.loop = true;
-        ringRef.current.volume = 0.6;
+        ringRef.current.volume = 0.55;
       }
       await ringRef.current.play().catch(() => {});
     } catch { /* noop */ }
