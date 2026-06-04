@@ -518,25 +518,27 @@ export const Route = createFileRoute("/api/public/student-portal")({
           }
 
           // ── flutterwave-init ────────────────────────────────────
-          // Returns the public key + amount so the client launches FlutterwaveCheckout inline.
+          // Returns publicKey + final amount (with optional FOUNDING10 coupon applied).
           if (action === "flutterwave-init") {
             const userId = verifySession(body.session as string);
             const plan = String(body.plan ?? "") as Plan;
-            const PRICES: Record<Plan, number> = { free: 0, inner_circle: 1000, premium: 1500 };
-            const amount = PRICES[plan];
-            if (!amount) throw new Error("Invalid plan");
+            const coupon = String(body.coupon ?? "").trim().toUpperCase();
+            const base = PLAN_PRICES_NGN[plan];
+            if (!base) throw new Error("Invalid plan");
+            const discounted = coupon === FOUNDING_COUPON ? Math.round(base * (1 - FOUNDING_DISCOUNT)) : base;
             const { data: p } = await supabaseAdmin.from("student_profiles")
               .select("first_name, email, whatsapp").eq("user_id", userId).maybeSingle();
             const tx_ref = `K2C-PLAN-${plan}-${userId.slice(0, 8)}-${Date.now()}`;
             return ok({
               publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY ?? "FLWPUBK-8c54aa491f6c0411b2e9b158189a7072-X",
-              amount, currency: "NGN", tx_ref, plan,
+              amount: discounted, baseAmount: base, currency: "NGN", tx_ref, plan,
+              couponApplied: discounted !== base ? FOUNDING_COUPON : null,
               customer: {
                 email: p?.email ?? "student@k2c.academy",
                 name: p?.first_name ?? "K2Ç Student",
                 phone_number: p?.whatsapp ?? "",
               },
-              meta: { user_id: userId, plan },
+              meta: { user_id: userId, plan, coupon: discounted !== base ? FOUNDING_COUPON : "" },
             });
           }
 
