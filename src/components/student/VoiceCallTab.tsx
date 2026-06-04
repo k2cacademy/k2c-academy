@@ -68,12 +68,10 @@ export function VoiceCallTab({
       // Use the two K2C ringtones interchangeably (random each call)
       const RINGTONES = ["/From Knowledge to Cash.mp3", "/From Knowledge to Cash (1).mp3"];
       const tone = RINGTONES[Math.floor(Math.random() * RINGTONES.length)];
-      if (!ringRef.current || ringRef.current.dataset?.tone !== tone) {
-        ringRef.current = new Audio(encodeURI(tone));
-        (ringRef.current as HTMLAudioElement & { dataset: DOMStringMap }).dataset.tone = tone;
-        ringRef.current.loop = true;
-        ringRef.current.volume = 0.55;
-      }
+      try { ringRef.current?.pause(); } catch { /* noop */ }
+      ringRef.current = new Audio(encodeURI(tone));
+      ringRef.current.loop = true;
+      ringRef.current.volume = 0.55;
       await ringRef.current.play().catch(() => {});
     } catch { /* noop */ }
 
