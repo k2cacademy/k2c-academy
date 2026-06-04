@@ -26,8 +26,8 @@ function loadFlutterwave(): Promise<boolean> {
 
 const PLANS: { id: Plan; label: string; price: string; perks: string[]; highlight?: boolean }[] = [
   { id: "free", label: "Free", price: "₦0", perks: ["10 voice minutes / month", "AI Chat coach", "Progress tracker"] },
-  { id: "inner_circle", label: "Inner Circle", price: "₦1,000 /mo", perks: ["100 voice minutes / month", "Inner Circle WhatsApp", "Book Editor unlimited"], highlight: true },
-  { id: "premium", label: "Premium", price: "₦1,500 /mo", perks: ["250 voice minutes / month", "All Inner Circle perks", "Priority response"] },
+  { id: "inner_circle", label: "Inner Circle", price: "₦1,000 /mo", perks: ["25 voice minutes / month", "Inner Circle WhatsApp", "Book Editor unlimited"], highlight: true },
+  { id: "premium", label: "Premium", price: "₦2,500 /mo", perks: ["40 voice minutes / month", "All Inner Circle perks", "Priority response"] },
 ];
 
 export function AccountTab({
@@ -46,14 +46,22 @@ export function AccountTab({
   onPlanChanged: () => void;
 }) {
   const [busy, setBusy] = useState<Plan | null>(null);
+  const [coupon, setCoupon] = useState("");
+  const [couponMsg, setCouponMsg] = useState<string | null>(null);
 
   useEffect(() => { void loadFlutterwave(); }, []);
 
   const upgrade = async (plan: Plan) => {
     if (plan === "free" || plan === currentPlan) return;
     setBusy(plan);
+    setCouponMsg(null);
     try {
-      const init = await flutterwaveInit({ session, plan });
+      const init = await flutterwaveInit({ session, plan, coupon: coupon.trim() || undefined });
+      if (coupon.trim() && !init.couponApplied) {
+        setCouponMsg("Coupon code not recognised — proceeding at full price.");
+      } else if (init.couponApplied) {
+        setCouponMsg(`Coupon ${init.couponApplied} applied — 10% off!`);
+      }
       const ok = await loadFlutterwave();
       if (!ok || !window.FlutterwaveCheckout) throw new Error("Could not load checkout. Try again.");
       window.FlutterwaveCheckout({
@@ -141,6 +149,20 @@ export function AccountTab({
         <p className="text-xs text-white/40 text-center">
           Powered by Flutterwave. Secure payment in Naira.
         </p>
+
+        <div className="rounded-2xl p-4" style={{ background: "rgba(20,20,30,0.6)", border: "1px solid rgba(147,51,234,0.25)" }}>
+          <p className="text-xs uppercase tracking-wider text-white/50 mb-2">Founding members coupon (optional)</p>
+          <input
+            value={coupon}
+            onChange={(e) => setCoupon(e.target.value)}
+            placeholder="Enter code, e.g. FOUNDING10"
+            className="w-full h-10 rounded-lg bg-black/30 border border-white/10 px-3 text-sm outline-none focus:border-yellow-400/50"
+            autoCapitalize="characters"
+            spellCheck={false}
+          />
+          {couponMsg && <p className="text-xs mt-2 text-yellow-300">{couponMsg}</p>}
+          <p className="text-[11px] text-white/40 mt-2">Coupon is applied automatically at checkout for any monthly subscription. Skip if you don't have one.</p>
+        </div>
 
         <div className="rounded-2xl p-4" style={{ background: "rgba(20,20,30,0.6)", border: "1px solid rgba(147,51,234,0.25)" }}>
           <p className="text-xs uppercase tracking-wider text-white/50 mb-2">Your details</p>

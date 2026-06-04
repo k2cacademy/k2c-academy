@@ -7,8 +7,8 @@ type Status = "idle" | "connecting" | "in-call" | "ended" | "no-minutes";
 
 const PLAN_LABEL: Record<MinutesState["plan"], string> = {
   free: "Free — 10 mins/month",
-  inner_circle: "Inner Circle — 100 mins/month",
-  premium: "Premium — 250 mins/month",
+  inner_circle: "Inner Circle — 25 mins/month",
+  premium: "Premium — 40 mins/month",
 };
 
 export function VoiceCallTab({
@@ -65,11 +65,13 @@ export function VoiceCallTab({
     setStatus("connecting");
     // Play ringtone while connecting
     try {
-      if (!ringRef.current) {
-        ringRef.current = new Audio("/From Knowledge to Cash.mp3");
-        ringRef.current.loop = true;
-        ringRef.current.volume = 0.6;
-      }
+      // Use the two K2C ringtones interchangeably (random each call)
+      const RINGTONES = ["/From Knowledge to Cash.mp3", "/From Knowledge to Cash (1).mp3"];
+      const tone = RINGTONES[Math.floor(Math.random() * RINGTONES.length)];
+      try { ringRef.current?.pause(); } catch { /* noop */ }
+      ringRef.current = new Audio(encodeURI(tone));
+      ringRef.current.loop = true;
+      ringRef.current.volume = 0.55;
       await ringRef.current.play().catch(() => {});
     } catch { /* noop */ }
 

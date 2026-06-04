@@ -97,11 +97,12 @@ export const updateMilestone = (data: { session: string; milestone: string; comp
   post<{ ok: boolean }>("update-milestone", data);
 
 export type FlutterwaveInit = {
-  publicKey: string; amount: number; currency: "NGN"; tx_ref: string;
-  plan: Plan; customer: { email: string; name: string; phone_number: string };
-  meta: { user_id: string; plan: Plan };
+  publicKey: string; amount: number; baseAmount: number; currency: "NGN"; tx_ref: string;
+  plan: Plan; couponApplied: string | null;
+  customer: { email: string; name: string; phone_number: string };
+  meta: { user_id: string; plan: Plan; coupon: string };
 };
-export const flutterwaveInit = (data: { session: string; plan: Plan }) =>
+export const flutterwaveInit = (data: { session: string; plan: Plan; coupon?: string }) =>
   post<FlutterwaveInit>("flutterwave-init", data);
 export const flutterwaveVerify = (data: { session: string; transaction_id: string; plan: Plan }) =>
   post<{ ok: boolean; plan: Plan }>("flutterwave-verify", data);
