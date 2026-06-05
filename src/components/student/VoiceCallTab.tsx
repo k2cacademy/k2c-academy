@@ -27,6 +27,17 @@ export function VoiceCallTab({
   const handleRef = useRef<VapiHandle | null>(null);
   const startedAtRef = useRef<number>(0);
   const ringRef = useRef<HTMLAudioElement | null>(null);
+  const stopRing = () => {
+    try {
+      if (ringRef.current) {
+        ringRef.current.pause();
+        ringRef.current.currentTime = 0;
+        ringRef.current.src = "";
+        ringRef.current.load();
+        ringRef.current = null;
+      }
+    } catch { /* noop */ }
+  };
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refreshMinutes = async () => {
