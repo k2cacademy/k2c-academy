@@ -76,7 +76,7 @@ export function Notifications() {
       .limit(20)
       .then(({ data }) => {
         if (data) setNotifications(data);
-      });
+      }, () => { /* table missing / network error — stay silent */ });
 
     // Subscribe to new notifications in real time
     const channel = supabase
