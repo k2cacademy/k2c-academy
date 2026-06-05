@@ -27,6 +27,17 @@ export function VoiceCallTab({
   const handleRef = useRef<VapiHandle | null>(null);
   const startedAtRef = useRef<number>(0);
   const ringRef = useRef<HTMLAudioElement | null>(null);
+  const stopRing = () => {
+    try {
+      if (ringRef.current) {
+        ringRef.current.pause();
+        ringRef.current.currentTime = 0;
+        ringRef.current.src = "";
+        ringRef.current.load();
+        ringRef.current = null;
+      }
+    } catch { /* noop */ }
+  };
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refreshMinutes = async () => {
@@ -39,7 +50,7 @@ export function VoiceCallTab({
     return () => {
       handleRef.current?.end();
       if (tickRef.current) clearInterval(tickRef.current);
-      ringRef.current?.pause();
+      stopRing();
     };
   }, []);
 
@@ -68,7 +79,7 @@ export function VoiceCallTab({
       // Use the two K2C ringtones interchangeably (random each call)
       const RINGTONES = ["/From Knowledge to Cash.mp3", "/From Knowledge to Cash (1).mp3"];
       const tone = RINGTONES[Math.floor(Math.random() * RINGTONES.length)];
-      try { ringRef.current?.pause(); } catch { /* noop */ }
+      try { stopRing(); } catch { /* noop */ }
       ringRef.current = new Audio(encodeURI(tone));
       ringRef.current.loop = true;
       ringRef.current.volume = 0.55;
@@ -78,7 +89,7 @@ export function VoiceCallTab({
     await startCallWithRotation({
       onConnected: (h) => {
         handleRef.current = h;
-        ringRef.current?.pause();
+        stopRing();
         startedAtRef.current = Date.now();
         setStatus("in-call");
         setMuted(false);
@@ -88,7 +99,7 @@ export function VoiceCallTab({
       },
       onEnded: () => { void finish(); },
       onAllFailed: async () => {
-        ringRef.current?.pause();
+        stopRing();
         const lk = await startLiveKitFallback(email);
         if (!lk) {
           setStatus("ended");

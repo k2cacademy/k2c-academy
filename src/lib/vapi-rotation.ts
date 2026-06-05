@@ -29,12 +29,23 @@ export type VapiCallbacks = {
 export async function startCallWithRotation(cb: VapiCallbacks): Promise<void> {
   let connected = false;
 
+  // Pre-warm mic permission so VAPI doesn't stall on first pair.
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+    s.getTracks().forEach((t) => t.stop());
+  } catch (e) {
+    console.error("[vapi] mic permission denied", e);
+    cb.onAllFailed();
+    return;
+  }
+
   const tryPair = async (index: number): Promise<void> => {
     if (index >= VAPI_PAIRS.length) {
       cb.onAllFailed();
       return;
     }
     const pair = VAPI_PAIRS[index];
+    console.log(`[vapi] trying pair ${index + 1}/${VAPI_PAIRS.length}`);
     const vapi = new Vapi(pair.publicKey);
     let settled = false;
 
@@ -46,7 +57,10 @@ export async function startCallWithRotation(cb: VapiCallbacks): Promise<void> {
       void tryPair(index + 1);
     };
 
-    vapi.on("error", (e) => rotate(`error: ${String(e)}`));
+    vapi.on("error", (e) => {
+      console.error(`[vapi] pair ${index + 1} error`, e);
+      rotate(`error: ${JSON.stringify(e)}`);
+    });
     vapi.on("call-end", () => {
       if (!connected) rotate("call-end before connect");
       else cb.onEnded();
@@ -55,6 +69,7 @@ export async function startCallWithRotation(cb: VapiCallbacks): Promise<void> {
       if (settled) return;
       settled = true;
       connected = true;
+      console.log(`[vapi] pair ${index + 1} CONNECTED`);
       cb.onConnected({
         vapi,
         pairIndex: index,
@@ -67,10 +82,11 @@ export async function startCallWithRotation(cb: VapiCallbacks): Promise<void> {
       await vapi.start(pair.assistantId);
     } catch (e) {
       rotate(`start threw: ${String(e)}`);
+      return;
     }
 
-    // Guard: if neither call-start nor error fires within 15s, rotate.
-    setTimeout(() => rotate("connect timeout 15s"), 15000);
+    // Guard: if neither call-start nor error fires within 8s, rotate (was 15s).
+    setTimeout(() => rotate("connect timeout 8s"), 8000);
   };
 
   await tryPair(0);
