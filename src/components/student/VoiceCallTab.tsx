@@ -31,8 +31,9 @@ export function VoiceCallTab({
     try {
       if (ringRef.current) {
         ringRef.current.pause();
+        ringRef.current.muted = true;
         ringRef.current.currentTime = 0;
-        ringRef.current.src = "";
+        ringRef.current.removeAttribute("src");
         ringRef.current.load();
         ringRef.current = null;
       }

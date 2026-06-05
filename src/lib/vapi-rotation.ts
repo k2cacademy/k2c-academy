@@ -48,13 +48,31 @@ export async function startCallWithRotation(cb: VapiCallbacks): Promise<void> {
     console.log(`[vapi] trying pair ${index + 1}/${VAPI_PAIRS.length}`);
     const vapi = new Vapi(pair.publicKey);
     let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const clearGuard = () => { if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; } };
 
     const rotate = (reason: string) => {
       if (settled || connected) return;
       settled = true;
+      clearGuard();
       console.warn(`[vapi] pair ${index + 1} failed: ${reason}, rotating`);
       try { vapi.stop(); } catch { /* noop */ }
       void tryPair(index + 1);
+    };
+
+    const markConnected = (via: string) => {
+      if (settled) return;
+      settled = true;
+      connected = true;
+      clearGuard();
+      console.log(`[vapi] pair ${index + 1} CONNECTED via ${via}`);
+      cb.onConnected({
+        vapi,
+        pairIndex: index,
+        setMuted: (m: boolean) => { try { vapi.setMuted(m); } catch { /* noop */ } },
+        end: () => { try { vapi.stop(); } catch { /* noop */ } },
+      });
     };
 
     vapi.on("error", (e) => {
@@ -62,21 +80,14 @@ export async function startCallWithRotation(cb: VapiCallbacks): Promise<void> {
       rotate(`error: ${JSON.stringify(e)}`);
     });
     vapi.on("call-end", () => {
+      clearGuard();
       if (!connected) rotate("call-end before connect");
       else cb.onEnded();
     });
-    vapi.on("call-start", () => {
-      if (settled) return;
-      settled = true;
-      connected = true;
-      console.log(`[vapi] pair ${index + 1} CONNECTED`);
-      cb.onConnected({
-        vapi,
-        pairIndex: index,
-        setMuted: (m: boolean) => { try { vapi.setMuted(m); } catch { /* noop */ } },
-        end: () => { try { vapi.stop(); } catch { /* noop */ } },
-      });
-    });
+    vapi.on("call-start", () => markConnected("call-start"));
+    // Fallback connect signals — some VAPI versions are slow to emit call-start
+    vapi.on("speech-start", () => markConnected("speech-start"));
+    vapi.on("message", () => markConnected("message"));
 
     try {
       await vapi.start(pair.assistantId);
@@ -85,8 +96,8 @@ export async function startCallWithRotation(cb: VapiCallbacks): Promise<void> {
       return;
     }
 
-    // Guard: if neither call-start nor error fires within 8s, rotate (was 15s).
-    setTimeout(() => rotate("connect timeout 8s"), 8000);
+    // Guard: if no connect signal within 20s, rotate.
+    timeoutId = setTimeout(() => rotate("connect timeout 20s"), 20000);
   };
 
   await tryPair(0);
