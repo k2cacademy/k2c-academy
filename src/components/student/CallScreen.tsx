@@ -267,7 +267,6 @@ export function CallScreen({
           firstMessageMode: "assistant-speaks-first",
           startSpeakingPlan: { waitSeconds: 0 },
           stopSpeakingPlan: { numWords: 0, voiceSeconds: 0.15, backoffSeconds: 0.25 },
-          silenceTimeoutSeconds: 60,
           variableValues: {
             studentKey: session,
             name: firstName,
