@@ -130,7 +130,7 @@ export function VoiceCallPanel({ email }: { email: string }) {
   const livekitRoomRef = useRef<unknown>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+  // Ringtone is owned by the strict audio-priority controller; no local ref.
 
   const isLive = status === "connected" || status === "livekit";
   const isConnecting =
@@ -140,26 +140,15 @@ export function VoiceCallPanel({ email }: { email: string }) {
   // ── Ringtone ──────────────────────────────────────────────────────────────
 
   const playRingtone = useCallback(() => {
-    try {
-      const audio = new Audio("/From Knowledge to Cash.mp3");
-      audio.loop = true;
-      audio.volume = 0.6;
-      audio.play().catch(() => { /* autoplay blocked — silent */ });
-      ringtoneRef.current = audio;
-    } catch { /* ignore */ }
+    // Lazy import to avoid SSR issues; armRingtone clears any prior kill-lock.
+    import("@/lib/ringtone").then(({ armRingtone, startRingtone }) => {
+      armRingtone();
+      startRingtone(0.6);
+    }).catch(() => { /* ignore */ });
   }, []);
 
   const stopRingtone = useCallback(() => {
-    try {
-      ringtoneRef.current?.pause();
-      if (ringtoneRef.current) {
-        ringtoneRef.current.muted = true;
-        ringtoneRef.current.currentTime = 0;
-        ringtoneRef.current.removeAttribute("src");
-        ringtoneRef.current.load();
-      }
-    } catch { /* ignore */ }
-    ringtoneRef.current = null;
+    import("@/lib/ringtone").then(({ killRingtone }) => killRingtone()).catch(() => { /* ignore */ });
   }, []);
 
   // ── Timer ─────────────────────────────────────────────────────────────────

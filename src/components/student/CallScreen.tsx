@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Vapi from "@vapi-ai/web";
 import { Phone, PhoneOff, Mic, MicOff, Loader2 } from "lucide-react";
 import { VAPI_PAIRS } from "@/lib/vapi-rotation";
+import { startRingtone, killRingtone, armRingtone } from "@/lib/ringtone";
 
 const FREE_TRIAL_SECONDS = 600;
 const INNER_CIRCLE_SECONDS = 99999;
@@ -73,17 +74,7 @@ export function CallScreen({
   };
 
   const stopRinging = () => {
-    try {
-      const audio = (window as unknown as { _k2cRingtone?: HTMLAudioElement })._k2cRingtone;
-      if (audio) {
-        audio.pause();
-        audio.muted = true;
-        audio.currentTime = 0;
-        audio.removeAttribute("src");
-        audio.load();
-        (window as unknown as { _k2cRingtone?: HTMLAudioElement })._k2cRingtone = undefined;
-      }
-    } catch { /* ignore */ }
+    killRingtone();
   };
 
   const cleanup = () => {
@@ -120,13 +111,8 @@ export function CallScreen({
   // Start ringtone
   useEffect(() => {
     if (status === "connecting") {
-      try {
-        const audio = new Audio("/From Knowledge to Cash.mp3");
-        audio.loop = true;
-        audio.volume = 0.5;
-        audio.play().catch(() => { /* autoplay blocked */ });
-        (window as unknown as { _k2cRingtone?: HTMLAudioElement })._k2cRingtone = audio;
-      } catch { /* ignore */ }
+      armRingtone();
+      startRingtone(0.5);
     }
   }, [status]);
 

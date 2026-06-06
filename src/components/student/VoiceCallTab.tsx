@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Phone, PhoneOff, Mic, MicOff, Loader2 } from "lucide-react";
 import { startCallWithRotation, startLiveKitFallback, type VapiHandle } from "@/lib/vapi-rotation";
+import { startRingtone, killRingtone, armRingtone } from "@/lib/ringtone";
 import { getMinutesState, recordVoiceMinutes, type MinutesState } from "@/lib/student-portal.functions";
 
 type Status = "idle" | "connecting" | "in-call" | "ended" | "no-minutes";
@@ -26,19 +27,7 @@ export function VoiceCallTab({
   const [minutes, setMinutes] = useState<MinutesState | null>(null);
   const handleRef = useRef<VapiHandle | null>(null);
   const startedAtRef = useRef<number>(0);
-  const ringRef = useRef<HTMLAudioElement | null>(null);
-  const stopRing = () => {
-    try {
-      if (ringRef.current) {
-        ringRef.current.pause();
-        ringRef.current.muted = true;
-        ringRef.current.currentTime = 0;
-        ringRef.current.removeAttribute("src");
-        ringRef.current.load();
-        ringRef.current = null;
-      }
-    } catch { /* noop */ }
-  };
+  const stopRing = () => { killRingtone(); };
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refreshMinutes = async () => {
@@ -75,17 +64,9 @@ export function VoiceCallTab({
     if (m.total_remaining <= 0) { setStatus("no-minutes"); return; }
 
     setStatus("connecting");
-    // Play ringtone while connecting
-    try {
-      // Use the two K2C ringtones interchangeably (random each call)
-      const RINGTONES = ["/From Knowledge to Cash.mp3", "/From Knowledge to Cash (1).mp3"];
-      const tone = RINGTONES[Math.floor(Math.random() * RINGTONES.length)];
-      try { stopRing(); } catch { /* noop */ }
-      ringRef.current = new Audio(encodeURI(tone));
-      ringRef.current.loop = true;
-      ringRef.current.volume = 0.55;
-      await ringRef.current.play().catch(() => {});
-    } catch { /* noop */ }
+    // Play ringtone while connecting (strict audio-priority controller)
+    armRingtone();
+    startRingtone(0.55);
 
     await startCallWithRotation({
       onConnected: (h) => {
