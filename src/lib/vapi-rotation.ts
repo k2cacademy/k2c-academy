@@ -92,6 +92,11 @@ export async function startCallWithRotation(cb: VapiCallbacks): Promise<void> {
     vapi.on("speech-start", () => markConnected("speech-start"));
     vapi.on("message", () => markConnected("message"));
 
+    // Install guard BEFORE awaiting start — out-of-credit pairs often hang
+    // inside start() itself and never resolve, so a post-await timer would
+    // never get installed. 8s gives funded pairs enough time to handshake.
+    timeoutId = setTimeout(() => rotate("connect timeout 8s"), 8000);
+
     try {
       await vapi.start(pair.assistantId);
     } catch (e) {
@@ -99,9 +104,6 @@ export async function startCallWithRotation(cb: VapiCallbacks): Promise<void> {
       return;
     }
 
-    // Guard: if no connect signal within 7s, rotate fast (out-of-credit pairs
-    // typically hang silently instead of emitting an error).
-    timeoutId = setTimeout(() => rotate("connect timeout 7s"), 7000);
   };
 
   await tryPair(0);
