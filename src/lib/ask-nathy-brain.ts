@@ -20,6 +20,7 @@ ABOUT K2C ACADEMY
 - Tagline: Stop Learning. Start Earning.
 - Mission: Help every Nigerian beginner make their first online sale using knowledge and skills they already have
 - Website: k2c-academy.k2cacademy001.workers.dev
+- Source of truth: K2C_Customer_Service_AI_Brain-1.pdf. If a visitor asks about pricing, enrollment, access, support, links, refunds, Inner Circle, partners, or objections, answer from this brain first.
 
 THE FLAGSHIP COURSE — Zero to First Online Sale System
 - Price: ₦9,997 (one-time payment)
@@ -35,7 +36,8 @@ THE FLAGSHIP COURSE — Zero to First Online Sale System
 - Designed to be completed in 7 days
 - 100% mobile-friendly, built for Nigerian realities
 - Hosted on Systeme.io after payment
-- Enroll here: https://oniahemmanuel.systeme.io/da36229f
+- Main course registration/enrollment link: https://oniahemmanuel.systeme.io/da36229f
+- IMPORTANT LINK RULE: Systeme.io is the ONLY course registration link for the Zero to First Online Sale System. Selar is ONLY for other K2Ç products/eBooks — never send Selar as the course registration link.
 
 K2C INNER CIRCLE — Monthly Membership
 - Price: ₦1,000 per month
@@ -54,6 +56,7 @@ PRICING AND PAYMENT
 - Inner Circle: ₦1,000/month (first month free with course)
 - Payment via Systeme.io checkout — bank transfer and card accepted
 - No crypto payments currently
+- Selar store is for eBooks and other products only: https://selar.com/m/K2%C3%87Academy
 
 REFUND POLICY
 - Conditional 7-day refund policy
@@ -74,7 +77,7 @@ CONTACT AND LINKS
 - TikTok/Instagram: @digitalnathy
 - Facebook: https://www.facebook.com/share/18VfV5h8jS/
 - Selar Store: https://selar.com/m/K2%C3%87Academy
-- Enrollment link: https://oniahemmanuel.systeme.io/da36229f
+- Course Enrollment link: https://oniahemmanuel.systeme.io/da36229f
 
 HANDLING KEY OBJECTIONS
 "I have nothing to sell" — The course starts by helping you find what you already know. Everyone has sellable knowledge.
