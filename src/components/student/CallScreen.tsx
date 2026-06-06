@@ -192,15 +192,25 @@ export function CallScreen({
 
       const vapi = new Vapi(publicKey);
       vapiRef.current = vapi;
+      let callOpened = false;
       let coachLive = false;
+      let speechTimeout: ReturnType<typeof setTimeout> | null = null;
 
       const connectTimeout = setTimeout(() => {
         if (cancelledRef.current || myAttempt !== attemptId) return;
-        if (!coachLive) {
+        if (!callOpened && !coachLive) {
           hardStop();
           tryNext();
         }
       }, 8000);
+
+      const clearAttemptTimers = () => {
+        clearTimeout(connectTimeout);
+        if (speechTimeout) {
+          clearTimeout(speechTimeout);
+          speechTimeout = null;
+        }
+      };
 
       const safe = (fn: () => void) => {
         if (cancelledRef.current) return;
@@ -208,17 +218,36 @@ export function CallScreen({
         fn();
       };
 
+      const waitForCoachVoice = () => {
+        if (coachLive || speechTimeout) return;
+        speechTimeout = setTimeout(() => {
+          if (cancelledRef.current || myAttempt !== attemptId || coachLive) return;
+          clearAttemptTimers();
+          hardStop();
+          tryNext();
+        }, 9000);
+      };
+
+      const markCallOpened = () => safe(() => {
+        if (callOpened) return;
+        callOpened = true;
+        clearTimeout(connectTimeout);
+        stopRinging();
+        setStatus("waiting-agent");
+        waitForCoachVoice();
+      });
+
       const markCoachLive = () => safe(() => {
         if (coachLive) return;
         coachLive = true;
-        clearTimeout(connectTimeout);
+        clearAttemptTimers();
         stopRinging();
         setStatus("connected");
         startTimerIfNeeded();
       });
 
       vapi.on("call-start", () => safe(() => {
-        markCoachLive();
+        markCallOpened();
       }));
 
       vapi.on("speech-start", () => safe(() => {
@@ -231,13 +260,13 @@ export function CallScreen({
       }));
 
       vapi.on("error", () => safe(() => {
-        clearTimeout(connectTimeout);
+        clearAttemptTimers();
         hardStop();
         tryNext();
       }));
 
       vapi.on("call-end", () => safe(() => {
-        clearTimeout(connectTimeout);
+        clearAttemptTimers();
         if (!coachLive) {
           hardStop();
           tryNext();
@@ -250,8 +279,11 @@ export function CallScreen({
         onClose();
       }));
 
-      vapi.on("message", (msg: { type?: string; transcript?: string; role?: string }) => safe(() => {
-        markCoachLive();
+      vapi.on("message", (msg: { type?: string; transcript?: string; role?: string; status?: string }) => safe(() => {
+        markCallOpened();
+        if (msg?.type === "model-output" || (msg?.type === "transcript" && msg.role === "assistant") || (msg?.type === "speech-update" && msg.status === "started")) {
+          markCoachLive();
+        }
         if (msg?.type === "transcript" && msg?.transcript) {
           messagesRef.current.push(`${msg.role}: ${msg.transcript}`);
         }
@@ -285,7 +317,7 @@ export function CallScreen({
         });
       } catch {
         if (cancelledRef.current || myAttempt !== attemptId) return;
-        clearTimeout(connectTimeout);
+        clearAttemptTimers();
         hardStop();
         tryNext();
       }
