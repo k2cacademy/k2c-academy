@@ -263,6 +263,12 @@ export function CallScreen({
 
       try {
         await vapi.start(assistantId, {
+          firstMessage: `Hey ${firstName}, I am here now. Tell me the one sales challenge you want us to fix today.`,
+          firstMessageMode: "assistant-speaks-first",
+          startSpeakingPlan: { waitSeconds: 0 },
+          stopSpeakingPlan: { numWords: 0, voiceSeconds: 0.15, backoffSeconds: 0.25 },
+          silenceTimeoutSeconds: 60,
+          clientMessages: ["conversation-update", "model-output", "speech-update", "status-update", "transcript", "voice-input", "assistant.started"],
           variableValues: {
             studentKey: session,
             name: firstName,
@@ -280,6 +286,7 @@ export function CallScreen({
           },
         });
       } catch {
+        if (cancelledRef.current || myAttempt !== attemptId) return;
         clearTimeout(connectTimeout);
         hardStop();
         tryNext();
