@@ -5,12 +5,15 @@ import Vapi from "@vapi-ai/web";
 
 export type VapiPair = { publicKey: string; assistantId: string };
 
+// NOTE: pair 1 (publicKey a83a3d16…) is out of credit — keep it at the END
+// of the rotation so we attempt funded pairs first and only fall back to it
+// as a last resort. We still keep it in case credit is topped up later.
 export const VAPI_PAIRS: VapiPair[] = [
-  { publicKey: "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1", assistantId: "a16cf991-f420-44f4-8460-0129939c9fe3" },
   { publicKey: "e6bf041d-1c62-4b94-a93c-52b563eef22c", assistantId: "5c3ce312-2f00-486c-8cd9-7da43417af4d" },
   { publicKey: "2ef0603f-4704-4cf4-9be8-a581fc68b192", assistantId: "d1fd7394-f3bc-4a1d-8181-a05a4978c572" },
   { publicKey: "04b01653-b99c-4749-b012-be91aa031768", assistantId: "e4d008ae-429f-4248-a503-33f30917b28e" },
   { publicKey: "146217bf-5d74-4870-acfd-6bad277f66eb", assistantId: "d6f52dbc-eb9b-422e-8815-27bf261ef0a9" },
+  { publicKey: "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1", assistantId: "a16cf991-f420-44f4-8460-0129939c9fe3" },
 ];
 
 export type VapiHandle = {
