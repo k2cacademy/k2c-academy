@@ -20,38 +20,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Phone, PhoneOff, Mic, MicOff, Loader2, Wifi } from "lucide-react";
 import Vapi from "@vapi-ai/web";
+import { VAPI_PAIRS } from "@/lib/vapi-rotation";
 
 // ─── Configuration ─────────────────────────────────────────────────────────
 
 const FREE_MINUTES_PER_MONTH = 10;
 
-const VAPI_CHAIN = [
-  {
-    label: "Primary",
-    publicKey: "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1",
-    assistantId: "a16cf991-f420-44f4-8460-0129939c9fe3",
-  },
-  {
-    label: "Fallback A",
-    publicKey: "e6bf041d-1c62-4b94-a93c-52b563eef22c",
-    assistantId: "5c3ce312-2f00-486c-8cd9-7da43417af4d",
-  },
-  {
-    label: "Fallback B",
-    publicKey: "2ef0603f-4704-4cf4-9be8-a581fc68b192",
-    assistantId: "d1fd7394-f3bc-4a1d-8181-a05a4978c572",
-  },
-  {
-    label: "Fallback C",
-    publicKey: "04b01653-b99c-4749-b012-be91aa031768",
-    assistantId: "e4d008ae-429f-4248-a503-33f30917b28e",
-  },
-  {
-    label: "Fallback D",
-    publicKey: "146217bf-5d74-4870-acfd-6bad277f66eb",
-    assistantId: "d6f52dbc-eb9b-422e-8815-27bf261ef0a9",
-  },
-] as const;
+const VAPI_CHAIN = VAPI_PAIRS;
 // ─── Monthly minutes helpers ───────────────────────────────────────────────
 
 function getMonthKey() {
@@ -177,7 +152,12 @@ export function VoiceCallPanel({ email }: { email: string }) {
   const stopRingtone = useCallback(() => {
     try {
       ringtoneRef.current?.pause();
-      if (ringtoneRef.current) ringtoneRef.current.currentTime = 0;
+      if (ringtoneRef.current) {
+        ringtoneRef.current.muted = true;
+        ringtoneRef.current.currentTime = 0;
+        ringtoneRef.current.removeAttribute("src");
+        ringtoneRef.current.load();
+      }
     } catch { /* ignore */ }
     ringtoneRef.current = null;
   }, []);
@@ -246,19 +226,57 @@ export function VoiceCallPanel({ email }: { email: string }) {
       vapiRef.current = vapi;
 
       await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("timeout")), 15000);
+        let callOpened = false;
+        let coachLive = false;
+        let speechTimeout: ReturnType<typeof setTimeout> | null = null;
+        const timeout = setTimeout(() => {
+          if (!callOpened && !coachLive) reject(new Error("timeout"));
+        }, 8000);
+
+        const cleanupAttemptTimers = () => {
+          clearTimeout(timeout);
+          if (speechTimeout) {
+            clearTimeout(speechTimeout);
+            speechTimeout = null;
+          }
+        };
+
+        const markCallOpened = () => {
+          if (callOpened) return;
+          callOpened = true;
+          clearTimeout(timeout);
+          speechTimeout = setTimeout(() => {
+            if (!coachLive) reject(new Error("coach silent"));
+          }, 9000);
+        };
+
+        const markCoachLive = () => {
+          if (coachLive) return;
+          coachLive = true;
+          cleanupAttemptTimers();
+          resolve();
+        };
 
         vapi.on("call-start", () => {
-          clearTimeout(timeout);
-          resolve();
+          markCallOpened();
         });
         vapi.on("error", (err: unknown) => {
-          clearTimeout(timeout);
+          cleanupAttemptTimers();
           reject(err);
         });
-        vapi.on("speech-start", () => setAgentSpeaking(true));
+        vapi.on("speech-start", () => {
+          markCoachLive();
+          setAgentSpeaking(true);
+        });
         vapi.on("speech-end", () => setAgentSpeaking(false));
+        vapi.on("message", (msg: { type?: string; role?: string; status?: string }) => {
+          markCallOpened();
+          if (msg?.type === "model-output" || (msg?.type === "transcript" && msg.role === "assistant") || (msg?.type === "speech-update" && msg.status === "started")) {
+            markCoachLive();
+          }
+        });
         vapi.on("call-end", () => {
+          cleanupAttemptTimers();
           setStatus((prev) => {
             if (prev === "connected") {
               fullCleanup();
@@ -268,7 +286,12 @@ export function VoiceCallPanel({ email }: { email: string }) {
           });
         });
 
-        vapi.start(assistant.assistantId);
+        vapi.start(assistant.assistantId, {
+          firstMessage: "Hey, I am here now. Tell me the one sales challenge you want us to fix today.",
+          firstMessageMode: "assistant-speaks-first",
+          startSpeakingPlan: { waitSeconds: 0 },
+          stopSpeakingPlan: { numWords: 0, voiceSeconds: 0.15, backoffSeconds: 0.25 },
+        }).catch(reject);
       });
 
       return true;
