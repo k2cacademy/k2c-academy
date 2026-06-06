@@ -137,8 +137,6 @@ export function CallScreen({
 
   // Main call logic
   useEffect(() => {
-    if (previousContext === null) return;
-
     cancelledRef.current = false;
     assistantIndexRef.current = 0;
 
