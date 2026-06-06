@@ -1,25 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Vapi from "@vapi-ai/web";
 import { Phone, PhoneOff, Mic, MicOff, Loader2 } from "lucide-react";
-
-const ASSISTANTS = [
-  {
-    publicKey: "a83a3d16-74f3-4f19-9fc7-3fa732cac8a1",
-    assistantId: "a16cf991-f420-44f4-8460-0129939c9fe3",
-  },
-  {
-    publicKey: "e6bf041d-1c62-4b94-a93c-52b563eef22c",
-    assistantId: "5c3ce312-2f00-486c-8cd9-7da43417af4d",
-  },
-  {
-    publicKey: "2ef0603f-4704-4cf4-9be8-a581fc68b192",
-    assistantId: "d1fd7394-f3bc-4a1d-8181-a05a4978c572",
-  },
-  {
-    publicKey: "04b01653-b99c-4749-b012-be91aa031768",
-    assistantId: "e4d008ae-429f-4248-a503-33f30917b28e",
-  },
-];
+import { VAPI_PAIRS } from "@/lib/vapi-rotation";
 
 const FREE_TRIAL_SECONDS = 600;
 const INNER_CIRCLE_SECONDS = 99999;
@@ -95,7 +77,11 @@ export function CallScreen({
       const audio = (window as unknown as { _k2cRingtone?: HTMLAudioElement })._k2cRingtone;
       if (audio) {
         audio.pause();
+        audio.muted = true;
         audio.currentTime = 0;
+        audio.removeAttribute("src");
+        audio.load();
+        (window as unknown as { _k2cRingtone?: HTMLAudioElement })._k2cRingtone = undefined;
       }
     } catch { /* ignore */ }
   };
@@ -190,14 +176,14 @@ export function CallScreen({
       const myAttempt = ++attemptId;
       if (cancelledRef.current) return;
 
-      if (assistantIndexRef.current >= ASSISTANTS.length) {
+      if (assistantIndexRef.current >= VAPI_PAIRS.length) {
         stopRinging();
         setError("All coaching sessions are currently busy. Please try again in a few minutes.");
         setStatus("ending");
         return;
       }
 
-      const { publicKey, assistantId } = ASSISTANTS[assistantIndexRef.current];
+      const { publicKey, assistantId } = VAPI_PAIRS[assistantIndexRef.current];
       assistantIndexRef.current++;
       setStatus("connecting");
       setError(null);
@@ -208,15 +194,15 @@ export function CallScreen({
 
       const vapi = new Vapi(publicKey);
       vapiRef.current = vapi;
-      let gotCallStart = false;
+      let coachLive = false;
 
       const connectTimeout = setTimeout(() => {
         if (cancelledRef.current || myAttempt !== attemptId) return;
-        if (!gotCallStart) {
+        if (!coachLive) {
           hardStop();
           tryNext();
         }
-      }, 20000);
+      }, 8000);
 
       const safe = (fn: () => void) => {
         if (cancelledRef.current) return;
@@ -224,17 +210,22 @@ export function CallScreen({
         fn();
       };
 
-      vapi.on("call-start", () => safe(() => {
-        gotCallStart = true;
+      const markCoachLive = () => safe(() => {
+        if (coachLive) return;
+        coachLive = true;
         clearTimeout(connectTimeout);
         stopRinging();
-        setStatus("waiting-agent");
+        setStatus("connected");
+        startTimerIfNeeded();
+      });
+
+      vapi.on("call-start", () => safe(() => {
+        markCoachLive();
       }));
 
       vapi.on("speech-start", () => safe(() => {
+        markCoachLive();
         setAgentSpeaking(true);
-        setStatus("connected");
-        startTimerIfNeeded();
       }));
 
       vapi.on("speech-end", () => safe(() => {
@@ -249,7 +240,7 @@ export function CallScreen({
 
       vapi.on("call-end", () => safe(() => {
         clearTimeout(connectTimeout);
-        if (!gotCallStart) {
+        if (!coachLive) {
           hardStop();
           tryNext();
           return;
@@ -262,6 +253,7 @@ export function CallScreen({
       }));
 
       vapi.on("message", (msg: { type?: string; transcript?: string; role?: string }) => safe(() => {
+        markCoachLive();
         if (msg?.type === "transcript" && msg?.transcript) {
           messagesRef.current.push(`${msg.role}: ${msg.transcript}`);
         }
