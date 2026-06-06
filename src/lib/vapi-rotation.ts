@@ -2,6 +2,7 @@
 // On any failure before the call connects, destroys the instance and rotates
 // to the next. If all 5 fail, the caller falls back to LiveKit dispatch.
 import Vapi from "@vapi-ai/web";
+import { killRingtone } from "@/lib/ringtone";
 
 export type VapiPair = { publicKey: string; assistantId: string };
 
@@ -87,10 +88,18 @@ export async function startCallWithRotation(cb: VapiCallbacks): Promise<void> {
       if (!connected) rotate("call-end before connect");
       else cb.onEnded();
     });
-    vapi.on("call-start", () => markConnected("call-start"));
-    // Fallback connect signals — some VAPI versions are slow to emit call-start
-    vapi.on("speech-start", () => markConnected("speech-start"));
-    vapi.on("message", () => markConnected("message"));
+    // STRICT AUDIO PRIORITY: kill ringtone the instant ANY coach audio signal
+    // is detected — before component-level state catches up. This guarantees
+    // the ringtone can't overlap with the coach's voice.
+    vapi.on("call-start", () => { killRingtone(); markConnected("call-start"); });
+    vapi.on("speech-start", () => { killRingtone(); markConnected("speech-start"); });
+    vapi.on("message", () => { killRingtone(); markConnected("message"); });
+    // Some VAPI builds emit volume-level updates as soon as the audio track
+    // is live — earliest possible signal that the coach stream exists.
+    try {
+      (vapi as unknown as { on: (ev: string, fn: () => void) => void })
+        .on("volume-level", () => { killRingtone(); });
+    } catch { /* noop */ }
 
     // Install guard BEFORE awaiting start — out-of-credit pairs often hang
     // inside start() itself and never resolve, so a post-await timer would
