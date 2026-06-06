@@ -99,8 +99,9 @@ export async function startCallWithRotation(cb: VapiCallbacks): Promise<void> {
       return;
     }
 
-    // Guard: if no connect signal within 20s, rotate.
-    timeoutId = setTimeout(() => rotate("connect timeout 20s"), 20000);
+    // Guard: if no connect signal within 7s, rotate fast (out-of-credit pairs
+    // typically hang silently instead of emitting an error).
+    timeoutId = setTimeout(() => rotate("connect timeout 7s"), 7000);
   };
 
   await tryPair(0);
